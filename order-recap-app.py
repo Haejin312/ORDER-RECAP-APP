@@ -74,6 +74,19 @@ def extract_pdf_text(pdf_bytes):
     doc.close()
     return text[:6000]
 
+def normalize_fabric(desc):
+    """fabric_desc 정규화 - 같은 fiber content를 하나로 묶기"""
+    d = desc.upper()
+    if re.search(r'60.?\s*COTTON.*40.?\s*POLY|60/40', d):
+        return "60% COTTON 40% POLYESTER KNIT"
+    if re.search(r'90.?\s*COTTON.*10.?\s*POLY|90/10', d):
+        return "90% COTTON 10% POLYESTER KNIT"
+    if re.search(r'100.?\s*COTTON', d):
+        return "100% COTTON KNIT"
+    if re.search(r'100.?\s*POLY', d):
+        return "100% POLYESTER KNIT"
+    return desc.strip()
+
 
 @app.route('/parse-po', methods=['POST'])
 def parse_po():
@@ -134,7 +147,6 @@ Rules:
 - fabric_desc: Extract EXACTLY what comes after the pipe "|" in the HTS line.
   Example: "HTS:6105.10.0010|MENS SHIRT 60% COTTON 40% POLYESTER KNIT HENLEY"
   -> fabric_desc = "MENS SHIRT 60% COTTON 40% POLYESTER KNIT HENLEY"
-  This is critical - different fiber contents must produce different fabric_desc values.
 - XSREG->XS, MREG->M, 2XLREG->2XL (strip REG suffix)
 - LTLL->LTLL, 2XLTLL->2XLTLL (keep TLL suffix)
 - pcs=0, fob=0 for sizes not in PO
@@ -153,28 +165,30 @@ PO TEXT:
         time.sleep(3)
         results.append(po)
 
-    # HTS + fabric_desc 조합으로 고유 Combo 슬롯 생성
+    # HTS + 정규화된 fiber content로 고유 Combo 생성
     slot_key_map = {}
     fabric_slots = []
     combo_idx = 1
 
     for po in results:
         hts = po.get('hts', '')
-        fabric_desc = po.get('fabric_desc', '')
-        key = (hts, fabric_desc)
+        raw_desc = po.get('fabric_desc', '')
+        norm_desc = normalize_fabric(raw_desc)
+        key = (hts, norm_desc)
         if key not in slot_key_map:
             combo = f'C{combo_idx}'
             slot_key_map[key] = combo
             fabric_slots.append({
                 'combo': combo,
                 'hts': hts,
-                'body_desc': fabric_desc,
+                'body_desc': norm_desc,
                 'body_code': '',
                 'trim_code': '',
                 'trim_desc': ''
             })
             combo_idx += 1
         po['fabric_combo'] = slot_key_map[key]
+        po['fabric_desc'] = norm_desc  # 정규화된 값으로 업데이트
 
     return jsonify({'pos': results, 'fabric_slots': fabric_slots})
 
@@ -219,7 +233,7 @@ def build_excel():
             w(ws, row, 4,  fab.get('body_desc', ''))
             w(ws, row, 7,  fab.get('trim_code', ''))
             w(ws, row, 8,  fab.get('trim_desc', ''))
-            w(ws, row, 11, fab.get('hts', ''))
+            # HTS CODE는 Order Recap에 미기재
 
         TARGET_W_PX = round(5 / 2.54 * 96)
         style_idx_map = {}
@@ -288,7 +302,6 @@ def build_excel():
         w(ws, ROW_REV_START, COL_REV_DATE,  td, 'YYYY-MM-DD')
         w(ws, ROW_REV_START, COL_REV_NOTES, 'PO Issued')
 
-        # 파일명: {file_no}_Order Recap_Team#4_{today}.xlsx
         filename = f'{file_no}_Order Recap_Team#4_{today}.xlsx'
 
         buf = io.BytesIO()
