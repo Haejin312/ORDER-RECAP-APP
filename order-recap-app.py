@@ -14,7 +14,7 @@ CORS(app)
 
 # ── 빈 템플릿 (base64) ─────────────────────────────────────
 # 서버 시작 시 템플릿 파일 로드
-TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'template.xlsx')
+TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'Carhartt order recap 양식.xlsx')
 
 def get_template_ws():
     wb = load_workbook(TEMPLATE_PATH)
