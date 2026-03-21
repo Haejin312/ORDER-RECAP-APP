@@ -74,6 +74,15 @@ def parse_date(s):
     except Exception:
         return None
 
+def extract_text_from_pdf(pdf_bytes):
+    """PyMuPDF로 PDF에서 텍스트만 추출 (토큰 절약)"""
+    doc = fitz.open(stream=pdf_bytes, filetype='pdf')
+    text = ''
+    for page in doc:
+        text += page.get_text()
+    doc.close()
+    return text[:8000]  # 최대 8000자로 제한
+
 
 @app.route('/parse-po', methods=['POST'])
 def parse_po():
@@ -91,7 +100,7 @@ def parse_po():
 
         msg = client.messages.create(
             model='claude-sonnet-4-5',
-            max_tokens=2000,
+            max_tokens=1500,
             messages=[{'role': 'user', 'content': [
                 {'type': 'document', 'source': {'type': 'base64', 'media_type': 'application/pdf', 'data': b64}},
                 {'type': 'text', 'text': '''Extract ALL data from this Carhartt PO PDF. Return ONLY valid JSON, no markdown:
@@ -107,34 +116,34 @@ def parse_po():
   "ship_mode": "S-Ocean",
   "hts": "6110.20.2069",
   "sizes": {
-    "XS":     {"pcs": 4,   "fob": 4.87},
-    "S":      {"pcs": 32,  "fob": 4.87},
-    "M":      {"pcs": 277, "fob": 4.87},
-    "L":      {"pcs": 373, "fob": 4.87},
-    "XL":     {"pcs": 292, "fob": 4.87},
-    "2XL":    {"pcs": 170, "fob": 4.87},
-    "3XL":    {"pcs": 101, "fob": 5.75},
-    "4XL":    {"pcs": 19,  "fob": 5.75},
-    "5XL":    {"pcs": 9,   "fob": 5.75},
-    "6XL":    {"pcs": 0,   "fob": 0},
-    "LTLL":   {"pcs": 14,  "fob": 5.48},
-    "XLTLL":  {"pcs": 15,  "fob": 5.48},
-    "2XLTLL": {"pcs": 14,  "fob": 5.48},
-    "3XLTLL": {"pcs": 6,   "fob": 5.48},
-    "4XLTLL": {"pcs": 1,   "fob": 5.48},
-    "5XLTLL": {"pcs": 0,   "fob": 0}
+    "XS": {"pcs": 4, "fob": 4.87},
+    "S": {"pcs": 32, "fob": 4.87},
+    "M": {"pcs": 277, "fob": 4.87},
+    "L": {"pcs": 373, "fob": 4.87},
+    "XL": {"pcs": 292, "fob": 4.87},
+    "2XL": {"pcs": 170, "fob": 4.87},
+    "3XL": {"pcs": 101, "fob": 5.75},
+    "4XL": {"pcs": 19, "fob": 5.75},
+    "5XL": {"pcs": 9, "fob": 5.75},
+    "6XL": {"pcs": 0, "fob": 0},
+    "LTLL": {"pcs": 14, "fob": 5.48},
+    "XLTLL": {"pcs": 15, "fob": 5.48},
+    "2XLTLL": {"pcs": 14, "fob": 5.48},
+    "3XLTLL": {"pcs": 6, "fob": 5.48},
+    "4XLTLL": {"pcs": 1, "fob": 5.48},
+    "5XLTLL": {"pcs": 0, "fob": 0}
   },
   "total_pcs": 1327
 }
 
 Rules:
-- style: extract only style number (e.g. "K126", "K128", "K231")
-- color_code: extract only color code after hyphen (K231-PRT -> "PRT", K128-BLK -> "BLK", K126-HH5 -> "HH5")
+- style: style number only (e.g. "K126", "K128", "K231")
+- color_code: color code only after hyphen (K231-PRT -> "PRT", K128-BLK -> "BLK")
 - XSREG->XS, MREG->M, 2XLREG->2XL (strip REG suffix)
 - LTLL->LTLL, 2XLTLL->2XLTLL (keep TLL suffix)
 - pcs=0, fob=0 for sizes not in PO
 - ship_to: first line only ("Carhartt DC5" or "Carhartt Inc")
-- ship_mode: use exactly "S-Ocean" for ocean, "Air" for air
+- ship_mode: "S-Ocean" for ocean, "Air" for air
 - Return ONLY the JSON'''}
             ]}]
         )
@@ -142,7 +151,7 @@ Rules:
         text = msg.content[0].text.strip()
         clean = re.sub(r'```json|```', '', text).strip()
         po = json.loads(clean)
-        time.sleep(10)
+        time.sleep(3)
         results.append(po)
 
     return jsonify({'pos': results})
@@ -160,40 +169,29 @@ def parse_bom():
 
     for f in files:
         pdf_bytes = f.read()
-        b64_pdf = base64.b64encode(pdf_bytes).decode()
+
+        # PDF에서 텍스트만 추출 (토큰 절약 - PDF 통째로 안 보냄)
+        pdf_text = extract_text_from_pdf(pdf_bytes)
 
         msg = client.messages.create(
             model='claude-sonnet-4-5',
-            max_tokens=2000,
+            max_tokens=1000,
             messages=[{'role': 'user', 'content': [
-                {'type': 'document', 'source': {'type': 'base64', 'media_type': 'application/pdf', 'data': b64_pdf}},
-                {'type': 'text', 'text': '''Extract from this Carhartt BOM PDF. Return ONLY valid JSON:
+                {'type': 'text', 'text': f'''Extract from this Carhartt BOM text. Return ONLY valid JSON:
 
-{
-  "style": "K128",
-  "active_colorways": {
-    "BLK": "Black",
-    "NVY": "Navy",
-    "CRH": "Carbon Heather",
-    "HGY": "Heather Grey"
-  },
-  "fabrics": [
-    {
-      "combo": "C1",
-      "body_code": "JE002",
-      "body_desc": "6.75oz 100% Cotton Jersey Solid Only",
-      "trim_code": "RB002",
-      "trim_desc": "8.9oz 1x1 Rib Knit Solid Only",
-      "hs_code": "6105.10.0010"
-    }
-  ]
-}
+{{"style": "K128",
+  "active_colorways": {{"BLK": "Black", "NVY": "Navy", "CRH": "Carbon Heather", "HGY": "Heather Grey"}},
+  "fabrics": [{{"combo": "C1", "body_code": "JE002", "body_desc": "6.75oz 100% Cotton Jersey Solid Only", "trim_code": "RB002", "trim_desc": "8.9oz 1x1 Rib Knit Solid Only", "hs_code": "6105.10.0010"}}]
+}}
 
 Rules:
 - style: style number only (e.g. "K128")
-- active_colorways: find "Active Colorways" section, parse CODE-Name format. CODE is 2-4 uppercase letters only.
+- active_colorways: find "Active Colorways" section, CODE is 2-4 uppercase letters only
 - fabrics: match C1-C4 combos from Composition section
-- Return ONLY the JSON'''}
+- Return ONLY the JSON
+
+BOM TEXT:
+{pdf_text}'''}
             ]}]
         )
 
@@ -201,6 +199,7 @@ Rules:
         clean = re.sub(r'```json|```', '', text).strip()
         bom = json.loads(clean)
 
+        # 스케치 이미지 추출
         doc = fitz.open(stream=pdf_bytes, filetype='pdf')
         page = doc[0]
         images = page.get_images(full=True)
@@ -215,7 +214,7 @@ Rules:
         doc.close()
 
         bom['sketch_b64'] = sketch_b64
-        time.sleep(10)
+        time.sleep(3)
         bom_map[bom['style']] = bom
 
     return jsonify(bom_map)
