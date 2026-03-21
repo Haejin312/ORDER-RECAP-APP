@@ -258,17 +258,10 @@ def build_excel():
                         buf = io.BytesIO()
                         pil.save(buf, format='PNG')
                         buf.seek(0)
-                        from openpyxl.drawing.spreadsheet_drawing import AnchorBase
-                        from openpyxl.drawing.xdr import XDRPoint2D, XDRPositiveSize2D
-                        from openpyxl.drawing.anchor import OneCellAnchor, AnchorMarker
                         xl_img = XLImage(buf)
+                        xl_img.anchor = f'{get_column_letter(hcol)}4'
                         xl_img.width  = TARGET_W_PX
                         xl_img.height = th
-                        # 약간 우측(col offset), 아래(row offset) 배치
-                        col_offset = 50000   # EMU 단위 (약간 우측)
-                        row_offset = 50000   # EMU 단위 (약간 아래)
-                        marker = AnchorMarker(col=hcol-1, colOff=col_offset, row=3, rowOff=row_offset)
-                        xl_img.anchor = OneCellAnchor(_from=marker, ext=XDRPositiveSize2D(TARGET_W_PX*9144, th*9144))
                         ws.add_image(xl_img)
                     except:
                         pass
