@@ -91,7 +91,7 @@ def parse_po():
         b64 = base64.b64encode(pdf_bytes).decode()
 
         msg = client.messages.create(
-            model='claude-haiku-4-5-20251001',
+            model='claude-sonnet-4-5',
             max_tokens=2000,
             messages=[{'role': 'user', 'content': [
                 {'type': 'document', 'source': {'type': 'base64', 'media_type': 'application/pdf', 'data': b64}},
@@ -140,7 +140,7 @@ Rules:
         text = msg.content[0].text.strip()
         clean = re.sub(r'```json|```', '', text).strip()
         po = json.loads(clean)
-        import time; time.sleep(1)
+        import time; time.sleep(2)
         results.append(po)
 
     return jsonify({'pos': results})
@@ -161,7 +161,7 @@ def parse_bom():
         b64_pdf = base64.b64encode(pdf_bytes).decode()
 
         msg = client.messages.create(
-            model='claude-haiku-4-5-20251001',
+            model='claude-sonnet-4-5',
             max_tokens=2000,
             messages=[{'role': 'user', 'content': [
                 {'type': 'document', 'source': {'type': 'base64', 'media_type': 'application/pdf', 'data': b64_pdf}},
