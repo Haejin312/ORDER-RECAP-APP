@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Order Recap Maker — Apparel Links</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,400;0,500;1,400&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --dark:     #1A1209;
+    --darker:   #0E0905;
+    --mid:      #2C1F0E;
+    --mid2:     #3A2C1A;
+    --amber:    #B8860B;
+    --amber-lt: #E8B84B;
+    --tan:      #C9A96E;
+    --cream:    #FAF6EE;
+    --muted:    #8A7A60;
+    --border:   #4A3A25;
+    --success:  #4A7C59;
+    --error:    #8B2C2C;
+    --card-bg:  #1E1610;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--dark); color: var(--cream);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh; display: flex; flex-direction: column;
+    font-size: 14px;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: var(--darker);
+    border-bottom: 1px solid var(--mid2);
+    padding: 0 32px;
+    height: 56px;
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  .logo-hex {
+    width: 28px; height: 28px;
+    background: var(--amber);
+    clip-path: polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+    flex-shrink: 0;
+  }
+  .logo-text {
+    font-family: 'DM Mono', monospace; font-size: 12px;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--tan);
+  }
+  .logo-text b { color: var(--amber-lt); font-weight: 500; }
+  nav { display: flex; gap: 2px; background: var(--mid); border-radius: 8px; padding: 3px; }
+  nav button {
+    background: none; border: none; cursor: pointer;
+    padding: 6px 16px; border-radius: 6px;
+    font-family: 'DM Sans', sans-serif; font-size: 13px; font-weight: 500;
+    color: var(--tan); transition: all 0.15s;
+  }
+  nav button.active { background: var(--amber); color: var(--dark); }
+  nav button:hover:not(.active) { color: var(--cream); }
+
+  /* ── API BAR ── */
+  .api-bar {
+    background: #100B05; border-bottom: 1px solid var(--mid2);
+    padding: 8px 32px; display: flex; align-items: center; gap: 12px;
+    font-size: 12px;
+  }
+  .api-bar label {
+    font-family: 'DM Mono', monospace; font-size: 10px;
+    letter-spacing: 0.12em; text-transform: uppercase; color: var(--tan);
+    white-space: nowrap;
+  }
+  .api-bar input {
+    flex: 1; max-width: 380px;
+    background: var(--mid); border: 1px solid var(--border);
+    border-radius: 6px; padding: 5px 10px;
+    color: var(--cream); font-family: 'DM Mono', monospace; font-size: 12px;
+    outline: none; transition: border-color 0.15s;
+  }
+  .api-bar input:focus { border-color: var(--amber); }
+  .api-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); flex-shrink: 0; }
+  .api-dot.ok  { background: var(--success); box-shadow: 0 0 6px var(--success); }
+  .api-dot.err { background: var(--error); }
+  .api-label { font-size: 11px; color: var(--muted); }
+  .api-label.ok { color: #6BBF85; }
+
+  /* ── MAIN ── */
+  main { flex: 1; padding: 28px 32px; }
+  .section { display: none; }
+  .section.active { display: block; }
+
+  .section-head { margin-bottom: 24px; }
+  .section-head h2 { font-size: 20px; font-weight: 600; margin-bottom: 3px; }
+  .section-head p { font-size: 13px; color: var(--muted); }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--card-bg); border: 1px solid var(--mid2);
+    border-radius: 12px; padding: 22px;
+    transition: border-color 0.2s;
+  }
+  .card:hover { border-color: var(--border); }
+  .card-label {
+    font-family: 'DM Mono', monospace; font-size: 10px;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--amber); margin-bottom: 4px;
+  }
+  .card-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+  .card-desc { font-size: 12px; color: var(--muted); line-height: 1.55; margin-bottom: 16px; }
+
+  /* ── NEW ORDER GRID ── */
+  .new-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    max-width: 900px;
+  }
+  .span2 { grid-column: 1 / -1; }
+
+  /* ── FILE# ROW ── */
+  .fileno-row {
+    display: flex; align-items: flex-end; gap: 20px;
+  }
+  .field { flex: 1; max-width: 300px; }
+  .field label {
+    display: block; font-family: 'DM Mono', monospace;
+    font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--tan); margin-bottom: 7px;
+  }
+  .field input {
+    width: 100%; background: var(--mid); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px;
+    color: var(--cream); font-family: 'DM Mono', monospace;
+    font-size: 15px; outline: none; transition: border-color 0.2s;
+  }
+  .field input:focus { border-color: var(--amber); }
+  .field small { display: block; font-size: 11px; color: var(--muted); margin-top: 5px; }
+
+  /* ── DROP ZONE ── */
+  .drop-zone {
+    border: 1.5px dashed var(--border); border-radius: 8px;
+    padding: 18px; text-align: center; cursor: pointer;
+    position: relative; transition: all 0.2s;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--amber); background: rgba(184,134,11,0.04);
+  }
+  .drop-zone input[type=file] {
+    position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+  }
+  .drop-zone .dz-icon { font-size: 22px; margin-bottom: 6px; }
+  .drop-zone .dz-txt  { font-size: 12px; color: var(--muted); }
+  .drop-zone .dz-txt b { color: var(--amber-lt); font-weight: 500; }
+
+  .file-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .file-pill {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--mid); border: 1px solid var(--border);
+    border-radius: 20px; padding: 4px 10px 4px 8px;
+    font-size: 11px; font-family: 'DM Mono', monospace; color: var(--cream);
+  }
+  .file-pill button {
+    background: none; border: none; cursor: pointer;
+    color: var(--muted); font-size: 13px; line-height: 1;
+    padding: 0; transition: color 0.15s;
+  }
+  .file-pill button:hover { color: var(--error); }
+
+  /* ── GENERATE BUTTON ── */
+  .btn-gen {
+    background: var(--amber); color: var(--dark);
+    border: none; cursor: pointer; padding: 11px 28px;
+    border-radius: 8px; font-family: 'DM Sans', sans-serif;
+    font-size: 14px; font-weight: 700; letter-spacing: 0.03em;
+    display: flex; align-items: center; gap: 8px;
+    transition: all 0.2s; white-space: nowrap;
+  }
+  .btn-gen:hover { background: var(--amber-lt); transform: translateY(-1px); }
+  .btn-gen:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+  .btn-gen .spinner {
+    width: 14px; height: 14px;
+    border: 2px solid rgba(0,0,0,0.3); border-top-color: var(--dark);
+    border-radius: 50%; animation: spin 0.7s linear infinite; display: none;
+  }
+  .btn-gen.loading .spinner { display: block; }
+  .btn-gen.loading .btn-arrow { display: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── PROGRESS ── */
+  .progress-card { display: none; }
+  .progress-card.visible { display: block; }
+  .progress-title {
+    font-family: 'DM Mono', monospace; font-size: 10px;
+    letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--tan); margin-bottom: 14px;
+  }
+  .steps { display: flex; flex-direction: column; gap: 10px; }
+  .step { display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
+  .step.active { color: var(--amber-lt); }
+  .step.done   { color: var(--cream); }
+  .step.err    { color: var(--error); }
+  .step-dot {
+    width: 22px; height: 22px; border-radius: 50%;
+    border: 1.5px solid currentColor; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-family: 'DM Mono', monospace;
+  }
+  .step.done .step-dot { background: var(--success); border-color: var(--success); }
+  .step.active .step-dot {
+    border-color: var(--amber-lt);
+    animation: pulse 1.2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* ── RESULT ── */
+  .result-row {
+    display: none; align-items: center; gap: 16px;
+    margin-top: 18px; padding: 14px 16px;
+    background: rgba(74,124,89,0.1); border: 1px solid var(--success);
+    border-radius: 8px;
+  }
+  .result-row.visible { display: flex; }
+  .result-icon { font-size: 24px; }
+  .result-info { flex: 1; }
+  .result-name { font-weight: 600; font-size: 14px; }
+  .result-meta { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: 'DM Mono', monospace; }
+  .btn-dl {
+    background: var(--success); color: white; border: none; cursor: pointer;
+    padding: 9px 18px; border-radius: 7px; font-size: 13px; font-weight: 600;
+    text-decoration: none; display: inline-block; transition: background 0.15s;
+  }
+  .btn-dl:hover { background: #3D6B4A; }
+
+  /* ── SEARCH ── */
+  .search-wrap { max-width: 680px; }
+  .search-row { display: flex; gap: 10px; margin-bottom: 20px; }
+  .search-row input {
+    flex: 1; background: var(--card-bg); border: 1px solid var(--mid2);
+    border-radius: 8px; padding: 11px 14px;
+    color: var(--cream); font-family: 'DM Mono', monospace;
+    font-size: 13px; outline: none; transition: border-color 0.2s;
+  }
+  .search-row input:focus { border-color: var(--amber); }
+  .btn-secondary {
+    background: var(--mid); color: var(--cream);
+    border: 1px solid var(--border); cursor: pointer;
+    padding: 11px 22px; border-radius: 8px; font-size: 13px; font-weight: 500;
+    transition: all 0.15s;
+  }
+  .btn-secondary:hover { border-color: var(--amber); color: var(--amber-lt); }
+
+  .recap-list { display: flex; flex-direction: column; gap: 8px; }
+  .recap-row {
+    background: var(--card-bg); border: 1px solid var(--mid2);
+    border-radius: 10px; padding: 14px 18px;
+    display: flex; align-items: center; gap: 14px;
+    transition: border-color 0.15s; cursor: default;
+  }
+  .recap-row:hover { border-color: var(--border); }
+  .recap-fno {
+    font-family: 'DM Mono', monospace; font-size: 13px;
+    font-weight: 500; color: var(--amber-lt); min-width: 150px;
+  }
+  .recap-info { flex: 1; font-size: 12px; color: var(--muted); }
+  .recap-date { font-family: 'DM Mono', monospace; font-size: 11px; color: #5A4A30; }
+  .recap-btns { display: flex; gap: 6px; }
+  .btn-xs {
+    background: var(--mid); border: 1px solid var(--border);
+    color: var(--tan); cursor: pointer; padding: 5px 12px;
+    border-radius: 6px; font-size: 11px; font-weight: 500;
+    transition: all 0.15s;
+  }
+  .btn-xs:hover { border-color: var(--amber); color: var(--amber-lt); }
+  .btn-xs.del:hover { border-color: var(--error); color: #CD5C5C; }
+
+  .empty { text-align: center; padding: 50px 20px; color: #5A4A30; }
+  .empty .e-icon { font-size: 32px; margin-bottom: 10px; }
+  .empty p { font-size: 13px; }
+
+  /* ── SETTINGS ── */
+  .settings-wrap { max-width: 520px; }
+  .setting-card { margin-bottom: 14px; }
+  .setting-card h3 { font-size: 13px; font-weight: 600; margin-bottom: 14px; color: var(--cream); }
+  .srow { margin-bottom: 12px; }
+  .srow label {
+    display: block; font-family: 'DM Mono', monospace; font-size: 10px;
+    letter-spacing: 0.12em; text-transform: uppercase; color: var(--tan); margin-bottom: 6px;
+  }
+  .srow input {
+    width: 100%; background: var(--mid); border: 1px solid var(--border);
+    border-radius: 7px; padding: 9px 12px;
+    color: var(--cream); font-size: 13px; outline: none;
+    transition: border-color 0.2s;
+  }
+  .srow input:focus { border-color: var(--amber); }
+  .srow input[readonly] { color: var(--muted); cursor: default; }
+  .btn-save {
+    background: var(--amber); color: var(--dark); border: none; cursor: pointer;
+    padding: 9px 22px; border-radius: 7px; font-size: 13px; font-weight: 600;
+    transition: background 0.15s;
+  }
+  .btn-save:hover { background: var(--amber-lt); }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed; bottom: 24px; right: 24px;
+    background: var(--mid); border: 1px solid var(--amber);
+    color: var(--cream); padding: 11px 18px; border-radius: 8px;
+    font-size: 13px; max-width: 320px;
+    transform: translateY(60px); opacity: 0;
+    transition: all 0.25s; pointer-events: none; z-index: 999;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.error { border-color: var(--error); }
+</style>
+</head>
+<body>
+
+<header>
+  <a class="logo" href="#">
+    <div class="logo-hex"></div>
+    <span class="logo-text">Apparel Links &nbsp;·&nbsp; <b>Order Recap Maker</b></span>
+  </a>
+  <nav>
+    <button class="active" onclick="nav('new',this)">New Order</button>
+    <button onclick="nav('search',this)">Search</button>
+    <button onclick="nav('settings',this)">Settings</button>
+  </nav>
+</header>
+
+<div class="api-bar">
+  <label>API KEY</label>
+  <input type="password" id="apiInput" placeholder="sk-ant-..." oninput="onApiInput(this.value)" autocomplete="off">
+  <div class="api-dot" id="apiDot"></div>
+  <span class="api-label" id="apiLabel">미입력</span>
+</div>
+
+<main>
+
+  <!-- ═══ NEW ORDER ═══ -->
+  <section class="section active" id="sec-new">
+    <div class="section-head">
+      <h2>New Order Recap</h2>
+      <p>PO 장과 BOM을 업로드하면 Order Recap Excel이 자동 생성됩니다.</p>
+    </div>
+
+    <div class="new-grid">
+
+      <!-- File# + Generate -->
+      <div class="card span2">
+        <div class="fileno-row">
+          <div class="field">
+            <label>File #</label>
+            <input type="text" id="fileNo" placeholder="예: GTGG-261550">
+            <small>내부 관리용 파일 번호</small>
+          </div>
+          <button class="btn-gen" id="genBtn" onclick="generate()">
+            <span class="btn-arrow">▶</span>
+            <div class="spinner"></div>
+            Generate Recap
+          </button>
+        </div>
+      </div>
+
+      <!-- PO Upload -->
+      <div class="card">
+        <div class="card-label">Step 1</div>
+        <div class="card-title">PO 장 업로드</div>
+        <div class="card-desc">Carhartt PO PDF를 업로드하세요.<br>여러 개 동시 업로드 가능합니다.</div>
+        <div class="drop-zone" id="dz-po"
+          ondragover="dzDrag(event,'dz-po')" ondragleave="dzLeave('dz-po')" ondrop="dzDrop(event,'po')">
+          <input type="file" accept=".pdf" multiple onchange="addFiles(this.files,'po')">
+          <div class="dz-icon">📄</div>
+          <div class="dz-txt"><b>클릭 또는 드래그</b>하여 PO PDF 추가</div>
+        </div>
+        <div class="file-pills" id="pills-po"></div>
+      </div>
+
+      <!-- BOM Upload -->
+      <div class="card">
+        <div class="card-label">Step 2</div>
+        <div class="card-title">BOM 업로드</div>
+        <div class="card-desc">스타일별 BOM PDF를 업로드하세요.<br>스케치·Fabric·Color Name 자동 추출됩니다.</div>
+        <div class="drop-zone" id="dz-bom"
+          ondragover="dzDrag(event,'dz-bom')" ondragleave="dzLeave('dz-bom')" ondrop="dzDrop(event,'bom')">
+          <input type="file" accept=".pdf" multiple onchange="addFiles(this.files,'bom')">
+          <div class="dz-icon">📋</div>
+          <div class="dz-txt"><b>클릭 또는 드래그</b>하여 BOM PDF 추가</div>
+        </div>
+        <div class="file-pills" id="pills-bom"></div>
+      </div>
+
+      <!-- Progress + Result -->
+      <div class="card span2 progress-card" id="progressCard">
+        <div class="progress-title">Processing</div>
+        <div class="steps" id="steps"></div>
+        <div class="result-row" id="resultRow">
+          <div class="result-icon">✅</div>
+          <div class="result-info">
+            <div class="result-name" id="resName"></div>
+            <div class="result-meta" id="resMeta"></div>
+          </div>
+          <a class="btn-dl" id="dlBtn" href="#">⬇ Excel 다운로드</a>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══ SEARCH ═══ -->
+  <section class="section" id="sec-search">
+    <div class="section-head">
+      <h2>Order Recap 조회</h2>
+      <p>File # 또는 스타일 번호로 검색하세요.</p>
+    </div>
+    <div class="search-wrap">
+      <div class="search-row">
+        <input type="text" id="searchQ" placeholder="File # 또는 Style # 검색..."
+          onkeydown="if(event.key==='Enter')doSearch()">
+        <button class="btn-secondary" onclick="doSearch()">검색</button>
+      </div>
+      <div class="recap-list" id="recapList"></div>
+    </div>
+  </section>
+
+  <!-- ═══ SETTINGS ═══ -->
+  <section class="section" id="sec-settings">
+    <div class="section-head">
+      <h2>Settings</h2>
+      <p>API 키, 서버 주소 및 기본 정보를 설정합니다.</p>
+    </div>
+    <div class="settings-wrap">
+      <div class="card setting-card">
+        <h3>🔑 Claude API</h3>
+        <div class="srow">
+          <label>API KEY</label>
+          <input type="password" id="setApiKey" placeholder="sk-ant-..." autocomplete="off">
+        </div>
+      </div>
+      <div class="card setting-card">
+        <h3>🌐 서버 주소</h3>
+        <div class="srow">
+          <label>Backend URL</label>
+          <input type="text" id="setBackendUrl" placeholder="https://order-recap-api.onrender.com">
+        </div>
+        <div class="srow">
+          <label>상태</label>
+          <input type="text" id="serverStatus" value="확인 전" readonly>
+        </div>
+        <button class="btn-secondary" style="margin-right:8px" onclick="testServer()">연결 테스트</button>
+      </div>
+      <div class="card setting-card">
+        <h3>🏭 Vendor 정보</h3>
+        <div class="srow">
+          <label>Vendor #</label>
+          <input type="text" id="setVendor" value="907697">
+        </div>
+        <div class="srow">
+          <label>Sewing</label>
+          <input type="text" id="setSewing" value="Apparel Links">
+        </div>
+      </div>
+      <button class="btn-save" onclick="saveSettings()">설정 저장</button>
+    </div>
+  </section>
+
+</main>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════
+// STATE & INIT
+// ═══════════════════════════════════════
+const S = {
+  poFiles: [], bomFiles: [],
+  recaps: JSON.parse(localStorage.getItem('recaps_v2') || '[]'),
+};
+
+const STEPS_DEF = [
+  { label: 'PO 파일 분석 중...' },
+  { label: 'BOM 분석 (스케치 · Fabric · Color)...' },
+  { label: 'Order Recap Excel 생성 중...' },
+  { label: '저장 완료 처리 중...' },
+];
+
+window.onload = () => {
+  const cfg = getSettings();
+  if (cfg.apiKey) {
+    document.getElementById('apiInput').value = cfg.apiKey;
+    document.getElementById('setApiKey').value = cfg.apiKey;
+    setApiDot(true);
+  }
+  if (cfg.backendUrl) document.getElementById('setBackendUrl').value = cfg.backendUrl;
+  if (cfg.vendor)     document.getElementById('setVendor').value = cfg.vendor;
+  if (cfg.sewing)     document.getElementById('setSewing').value = cfg.sewing;
+  renderList();
+};
+
+// ═══════════════════════════════════════
+// SETTINGS
+// ═══════════════════════════════════════
+function getSettings() {
+  return JSON.parse(localStorage.getItem('appConfig') || '{}');
+}
+function saveSettings() {
+  const cfg = {
+    apiKey:     document.getElementById('setApiKey').value.trim(),
+    backendUrl: document.getElementById('setBackendUrl').value.trim().replace(/\/$/, ''),
+    vendor:     document.getElementById('setVendor').value.trim(),
+    sewing:     document.getElementById('setSewing').value.trim(),
+  };
+  localStorage.setItem('appConfig', JSON.stringify(cfg));
+  if (cfg.apiKey) {
+    document.getElementById('apiInput').value = cfg.apiKey;
+    setApiDot(cfg.apiKey.startsWith('sk-ant-'));
+  }
+  toast('설정이 저장되었습니다.');
+}
+async function testServer() {
+  const url = document.getElementById('setBackendUrl').value.trim().replace(/\/$/, '');
+  const el = document.getElementById('serverStatus');
+  el.value = '연결 중...';
+  try {
+    const r = await fetch(url + '/health', { signal: AbortSignal.timeout(8000) });
+    const d = await r.json();
+    el.value = d.status === 'ok'
+      ? `✓ 연결됨 (템플릿: ${d.template ? '있음' : '없음'})`
+      : '응답 오류';
+    toast('서버 연결 성공!');
+  } catch (e) {
+    el.value = '연결 실패 — URL을 확인해주세요';
+    toast('서버 연결 실패', true);
+  }
+}
+
+// ═══════════════════════════════════════
+// API KEY
+// ═══════════════════════════════════════
+function onApiInput(val) {
+  const ok = val.startsWith('sk-ant-');
+  setApiDot(ok);
+  if (ok) {
+    const cfg = getSettings();
+    cfg.apiKey = val;
+    localStorage.setItem('appConfig', JSON.stringify(cfg));
+    document.getElementById('setApiKey').value = val;
+  }
+}
+function setApiDot(ok) {
+  document.getElementById('apiDot').className = 'api-dot ' + (ok ? 'ok' : 'err');
+  const lbl = document.getElementById('apiLabel');
+  lbl.textContent = ok ? '연결됨' : '미입력';
+  lbl.className = 'api-label ' + (ok ? 'ok' : '');
+}
+
+// ═══════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════
+function nav(id, btn) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('sec-' + id).classList.add('active');
+  btn.classList.add('active');
+  if (id === 'search') renderList();
+}
+
+// ═══════════════════════════════════════
+// FILE UPLOAD
+// ═══════════════════════════════════════
+function dzDrag(e, id) { e.preventDefault(); document.getElementById(id).classList.add('drag-over'); }
+function dzLeave(id) { document.getElementById(id).classList.remove('drag-over'); }
+function dzDrop(e, type) {
+  e.preventDefault();
+  dzLeave('dz-' + type);
+  addFiles(e.dataTransfer.files, type);
+}
+function addFiles(files, type) {
+  const arr = type === 'po' ? S.poFiles : S.bomFiles;
+  Array.from(files).forEach(f => { if (!arr.find(x => x.name === f.name)) arr.push(f); });
+  renderPills(type);
+}
+function removeFile(name, type) {
+  if (type === 'po') S.poFiles = S.poFiles.filter(f => f.name !== name);
+  else S.bomFiles = S.bomFiles.filter(f => f.name !== name);
+  renderPills(type);
+}
+function renderPills(type) {
+  const arr = type === 'po' ? S.poFiles : S.bomFiles;
+  document.getElementById('pills-' + type).innerHTML = arr.map(f => `
+    <div class="file-pill">
+      <span>📄</span><span>${f.name}</span>
+      <button onclick="removeFile('${f.name}','${type}')">✕</button>
+    </div>`).join('');
+}
+function f2b64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(',')[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+// ═══════════════════════════════════════
+// GENERATE
+// ═══════════════════════════════════════
+async function generate() {
+  const cfg     = getSettings();
+  const fileNo  = document.getElementById('fileNo').value.trim();
+  const apiKey  = document.getElementById('apiInput').value.trim() || cfg.apiKey;
+  const baseUrl = cfg.backendUrl;
+
+  if (!apiKey || !apiKey.startsWith('sk-ant-'))
+    return toast('API 키를 먼저 입력해주세요.', true);
+  if (!fileNo)              return toast('File # 를 입력해주세요.', true);
+  if (S.poFiles.length === 0) return toast('PO 파일을 업로드해주세요.', true);
+  if (!baseUrl)             return toast('Settings에서 서버 주소를 입력해주세요.', true);
+
+  const btn  = document.getElementById('genBtn');
+  const card = document.getElementById('progressCard');
+  btn.disabled = true;
+  btn.classList.add('loading');
+  card.classList.add('visible');
+  document.getElementById('resultRow').classList.remove('visible');
+  renderSteps(-1);
+
+  try {
+    // ── STEP 1: PO 파싱 ──────────────────────────────────
+    setStep(0, 'active');
+    const poFD = new FormData();
+    for (const f of S.poFiles) poFD.append('files', f);
+    const poRes = await fetch(baseUrl + '/parse-po', {
+      method: 'POST',
+      headers: { 'X-Api-Key': apiKey },
+      body: poFD,
+    });
+    if (!poRes.ok) throw new Error('PO 파싱 실패: ' + await poRes.text());
+    const poData = await poRes.json();
+    setStep(0, 'done');
+
+    // ── STEP 2: BOM 파싱 ─────────────────────────────────
+    setStep(1, 'active');
+    let bomData = {};
+    if (S.bomFiles.length > 0) {
+      const bomFD = new FormData();
+      for (const f of S.bomFiles) bomFD.append('files', f);
+      const bomRes = await fetch(baseUrl + '/parse-bom', {
+        method: 'POST',
+        headers: { 'X-Api-Key': apiKey },
+        body: bomFD,
+      });
+      if (!bomRes.ok) throw new Error('BOM 파싱 실패: ' + await bomRes.text());
+      bomData = await bomRes.json();
+    }
+    setStep(1, 'done');
+
+    // ── STEP 3: Excel 생성 ───────────────────────────────
+    setStep(2, 'active');
+    const exRes = await fetch(baseUrl + '/build-excel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Api-Key': apiKey },
+      body: JSON.stringify({
+        fileNo,
+        pos:      poData.pos,
+        bom:      bomData,
+        vendorNo: cfg.vendor || '907697',
+        sewing:   cfg.sewing || 'Apparel Links',
+        today:    new Date().toISOString().split('T')[0],
+      }),
+    });
+    if (!exRes.ok) throw new Error('Excel 생성 실패: ' + await exRes.text());
+    const exData = await exRes.json();
+    setStep(2, 'done');
+
+    // ── STEP 4: 저장 ─────────────────────────────────────
+    setStep(3, 'active');
+    const styles = [...new Set(poData.pos.map(p => p.style))].join(', ');
+    const entry  = {
+      fileNo,
+      styles,
+      poCount:  poData.pos.length,
+      totalPcs: poData.pos.reduce((a, p) => a + (p.total_pcs || 0), 0),
+      xlsxB64:  exData.xlsx_b64,
+      filename: exData.filename,
+      createdAt: new Date().toISOString(),
+    };
+    saveRecap(entry);
+    setStep(3, 'done');
+
+    // ── 결과 표시 ────────────────────────────────────────
+    showResult(entry);
+
+  } catch (err) {
+    toast(err.message, true);
+    console.error(err);
+  }
+
+  btn.disabled = false;
+  btn.classList.remove('loading');
+}
+
+// ═══════════════════════════════════════
+// STEPS UI
+// ═══════════════════════════════════════
+function renderSteps() {
+  document.getElementById('steps').innerHTML = STEPS_DEF.map((s, i) => `
+    <div class="step" id="step${i}">
+      <div class="step-dot">${i+1}</div>
+      <span>${s.label}</span>
+    </div>`).join('');
+}
+function setStep(idx, status) {
+  const el = document.getElementById('step' + idx);
+  if (!el) return;
+  el.className = 'step ' + status;
+  if (status === 'done') el.querySelector('.step-dot').textContent = '✓';
+  if (status === 'active') el.querySelector('.step-dot').textContent = '…';
+}
+
+// ═══════════════════════════════════════
+// RESULT
+// ═══════════════════════════════════════
+function showResult(entry) {
+  const row = document.getElementById('resultRow');
+  row.classList.add('visible');
+  document.getElementById('resName').textContent = `Order Recap — ${entry.fileNo}`;
+  document.getElementById('resMeta').textContent =
+    `${entry.styles} · ${entry.poCount} POs · ${entry.totalPcs.toLocaleString()} pcs`;
+
+  const blob = b64toBlob(entry.xlsxB64,
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  const url  = URL.createObjectURL(blob);
+  const dl   = document.getElementById('dlBtn');
+  dl.href     = url;
+  dl.download = entry.filename;
+  toast(`✓ ${entry.fileNo} 생성 완료!`);
+}
+
+function b64toBlob(b64, mime) {
+  const raw = atob(b64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+// ═══════════════════════════════════════
+// RECAP STORAGE
+// ═══════════════════════════════════════
+function saveRecap(entry) {
+  const idx = S.recaps.findIndex(r => r.fileNo === entry.fileNo);
+  if (idx >= 0) S.recaps[idx] = entry;
+  else S.recaps.unshift(entry);
+  localStorage.setItem('recaps_v2', JSON.stringify(S.recaps));
+}
+function doSearch() {
+  const q = document.getElementById('searchQ').value.toLowerCase();
+  renderList(q);
+}
+function renderList(filter = '') {
+  const el   = document.getElementById('recapList');
+  if (!el) return;
+  const list = filter
+    ? S.recaps.filter(r =>
+        r.fileNo.toLowerCase().includes(filter) ||
+        (r.styles || '').toLowerCase().includes(filter))
+    : S.recaps;
+
+  if (!list.length) {
+    el.innerHTML = `<div class="empty"><div class="e-icon">📂</div>
+      <p>${filter ? '검색 결과 없음' : '저장된 Order Recap이 없습니다.'}</p></div>`;
+    return;
+  }
+  el.innerHTML = list.map(r => `
+    <div class="recap-row">
+      <div class="recap-fno">${r.fileNo}</div>
+      <div class="recap-info">${r.styles || ''} · ${r.poCount || 0} POs · ${(r.totalPcs||0).toLocaleString()} pcs</div>
+      <div class="recap-date">${new Date(r.createdAt).toLocaleDateString('ko-KR')}</div>
+      <div class="recap-btns">
+        <button class="btn-xs" onclick="dlRecap('${r.fileNo}')">⬇ Excel</button>
+        <button class="btn-xs del" onclick="delRecap('${r.fileNo}')">삭제</button>
+      </div>
+    </div>`).join('');
+}
+function dlRecap(fileNo) {
+  const r = S.recaps.find(x => x.fileNo === fileNo);
+  if (!r) return;
+  const blob = b64toBlob(r.xlsxB64,
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = r.filename || `OrderRecap_${fileNo}.xlsx`;
+  a.click();
+}
+function delRecap(fileNo) {
+  if (!confirm(`"${fileNo}" Recap을 삭제하시겠어요?`)) return;
+  S.recaps = S.recaps.filter(r => r.fileNo !== fileNo);
+  localStorage.setItem('recaps_v2', JSON.stringify(S.recaps));
+  renderList();
+  toast('삭제되었습니다.');
+}
+
+// ═══════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════
+function toast(msg, isErr = false) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show' + (isErr ? ' error' : '');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.className = '', 3200);
+}
+</script>
+</body>
+</html>
