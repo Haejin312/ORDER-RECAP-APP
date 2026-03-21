@@ -105,7 +105,7 @@ def parse_po():
   "ship_to": "Carhartt Inc",
   "ship_mode": "S-Ocean",
   "hts": "6105.10.0010",
-  "fabric_desc": "100% COTTON KNIT",
+  "fabric_desc": "MENS SHIRT 60% COTTON 40% POLYESTER KNIT HENLEY",
   "sizes": {{
     "XS": {{"pcs": 4, "fob": 4.87}},
     "S": {{"pcs": 32, "fob": 4.87}},
@@ -131,7 +131,10 @@ Rules:
 - style: style number only (e.g. "K126", "K128", "K231")
 - color_code: color code only after last hyphen in SKU (K128-BLK->"BLK", K126-HH5->"HH5")
 - hts: HTS code from "HTS:XXXX" format (e.g. "6105.10.0010")
-- fabric_desc: fiber content description from HTS line (e.g. "100% COTTON KNIT", "60% COTTON 40% POLYESTER KNIT", "90% COTTON 10% POLYESTER KNIT")
+- fabric_desc: Extract EXACTLY what comes after the pipe "|" in the HTS line.
+  Example: "HTS:6105.10.0010|MENS SHIRT 60% COTTON 40% POLYESTER KNIT HENLEY"
+  -> fabric_desc = "MENS SHIRT 60% COTTON 40% POLYESTER KNIT HENLEY"
+  This is critical - different fiber contents must produce different fabric_desc values.
 - XSREG->XS, MREG->M, 2XLREG->2XL (strip REG suffix)
 - LTLL->LTLL, 2XLTLL->2XLTLL (keep TLL suffix)
 - pcs=0, fob=0 for sizes not in PO
@@ -150,34 +153,28 @@ PO TEXT:
         time.sleep(3)
         results.append(po)
 
-    # HTS별로 fabric_desc 수집 (중복 제거)
-    hts_map = {}
-    for po in results:
-        hts = po.get('hts', '')
-        desc = po.get('fabric_desc', '')
-        if hts and hts not in hts_map:
-            hts_map[hts] = desc
-
-    # fabric 슬롯 자동 배정 (C1, C2, C3...)
+    # HTS + fabric_desc 조합으로 고유 Combo 슬롯 생성
+    slot_key_map = {}
     fabric_slots = []
-    for i, (hts, desc) in enumerate(hts_map.items()):
-        combo = f'C{i+1}'
-        fabric_slots.append({
-            'combo': combo,
-            'hts': hts,
-            'body_desc': desc,
-            'body_code': '',
-            'trim_code': '',
-            'trim_desc': ''
-        })
+    combo_idx = 1
 
-    # 각 PO에 combo 배정
     for po in results:
         hts = po.get('hts', '')
-        for slot in fabric_slots:
-            if slot['hts'] == hts:
-                po['fabric_combo'] = slot['combo']
-                break
+        fabric_desc = po.get('fabric_desc', '')
+        key = (hts, fabric_desc)
+        if key not in slot_key_map:
+            combo = f'C{combo_idx}'
+            slot_key_map[key] = combo
+            fabric_slots.append({
+                'combo': combo,
+                'hts': hts,
+                'body_desc': fabric_desc,
+                'body_code': '',
+                'trim_code': '',
+                'trim_desc': ''
+            })
+            combo_idx += 1
+        po['fabric_combo'] = slot_key_map[key]
 
     return jsonify({'pos': results, 'fabric_slots': fabric_slots})
 
@@ -214,7 +211,6 @@ def build_excel():
         if pos:
             w(ws, ROW_SEASON, 3, pos[0].get('season', ''))
 
-        # Fabric Combination
         fabrics.sort(key=lambda x: x.get('combo', ''))
         for fab in fabrics:
             row = ROW_C.get(fab.get('combo', ''))
@@ -225,7 +221,6 @@ def build_excel():
             w(ws, row, 8,  fab.get('trim_desc', ''))
             w(ws, row, 11, fab.get('hts', ''))
 
-        # Style# 헤더 + 스케치
         TARGET_W_PX = round(5 / 2.54 * 96)
         style_idx_map = {}
 
@@ -256,7 +251,6 @@ def build_excel():
                     except:
                         pass
 
-        # PO 데이터
         for slot_idx, po in enumerate(pos):
             if slot_idx >= 16: break
             cp = pcs_col(slot_idx)
@@ -294,12 +288,15 @@ def build_excel():
         w(ws, ROW_REV_START, COL_REV_DATE,  td, 'YYYY-MM-DD')
         w(ws, ROW_REV_START, COL_REV_NOTES, 'PO Issued')
 
+        # 파일명: {file_no}_Order Recap_Team#4_{today}.xlsx
+        filename = f'{file_no}_Order Recap_Team#4_{today}.xlsx'
+
         buf = io.BytesIO()
         wb.save(buf)
         buf.seek(0)
         xlsx_b64 = base64.b64encode(buf.read()).decode()
 
-        return jsonify({'xlsx_b64': xlsx_b64, 'filename': f'OrderRecap_{file_no}_{today}.xlsx'})
+        return jsonify({'xlsx_b64': xlsx_b64, 'filename': filename})
 
     except Exception as e:
         import traceback
