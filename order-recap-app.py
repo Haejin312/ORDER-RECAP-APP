@@ -1,4 +1,4 @@
-import os, io, json, base64, datetime, re
+import os, io, json, base64, datetime, re, time
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import anthropic
@@ -14,7 +14,6 @@ CORS(app)
 
 TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'Carhartt order recap 양식.xlsx')
 
-# ── 실제 양식 구조 (직접 확인된 행/열 번호) ─────────────────
 ROW_FILE_NO   = 1
 ROW_SEASON    = 2
 ROW_VENDOR    = 3
@@ -129,10 +128,13 @@ def parse_po():
 }
 
 Rules:
+- style: extract only style number (e.g. "K126", "K128", "K231")
+- color_code: extract only color code after hyphen (K231-PRT -> "PRT", K128-BLK -> "BLK", K126-HH5 -> "HH5")
 - XSREG->XS, MREG->M, 2XLREG->2XL (strip REG suffix)
 - LTLL->LTLL, 2XLTLL->2XLTLL (keep TLL suffix)
 - pcs=0, fob=0 for sizes not in PO
 - ship_to: first line only ("Carhartt DC5" or "Carhartt Inc")
+- ship_mode: use exactly "S-Ocean" for ocean, "Air" for air
 - Return ONLY the JSON'''}
             ]}]
         )
@@ -140,7 +142,7 @@ Rules:
         text = msg.content[0].text.strip()
         clean = re.sub(r'```json|```', '', text).strip()
         po = json.loads(clean)
-        import time; time.sleep(2)
+        time.sleep(2)
         results.append(po)
 
     return jsonify({'pos': results})
@@ -188,7 +190,8 @@ def parse_bom():
 }
 
 Rules:
-- active_colorways: find "Active Colorways" section, parse CODE-Name format
+- style: style number only (e.g. "K128")
+- active_colorways: find "Active Colorways" section, parse CODE-Name format. CODE is 2-4 uppercase letters only.
 - fabrics: match C1-C4 combos from Composition section
 - Return ONLY the JSON'''}
             ]}]
@@ -212,7 +215,7 @@ Rules:
         doc.close()
 
         bom['sketch_b64'] = sketch_b64
-        import time; time.sleep(1)
+        time.sleep(2)
         bom_map[bom['style']] = bom
 
     return jsonify(bom_map)
@@ -233,15 +236,15 @@ def build_excel():
         today   = data.get('today', datetime.date.today().isoformat())
 
         wb, ws = get_template_ws()
+
         pos.sort(key=lambda p: parse_date(p.get('ex_factory_date', '')) or datetime.date.max)
-        # 헤더
+
         w(ws, ROW_FILE_NO, 3, file_no)
         w(ws, ROW_VENDOR,  3, vendor)
         w(ws, ROW_SEWING,  3, sewing)
         if pos:
             w(ws, ROW_SEASON, 3, pos[0].get('season', ''))
 
-        # Fabric Combination
         all_fabrics = []
         seen = set()
         for bom in bom_map.values():
@@ -262,7 +265,6 @@ def build_excel():
             w(ws, row, 8,  fab.get('trim_desc', ''))
             w(ws, row, 11, fab.get('hs_code', ''))
 
-        # Style# 헤더 + 스케치
         TARGET_W_PX = round(5 / 2.54 * 96)
         style_idx_map = {}
 
@@ -294,7 +296,6 @@ def build_excel():
                     except Exception:
                         pass
 
-        # PO 데이터
         for slot_idx, po in enumerate(pos):
             if slot_idx >= 16:
                 break
@@ -339,7 +340,6 @@ def build_excel():
                 w(ws, row, cp, pcs if pcs else None)
                 w(ws, row, cf, fob if fob else None)
 
-        # Revision History
         today_date = parse_date(today) or datetime.date.today()
         w(ws, ROW_REV_START, COL_REV_DATE,  today_date, 'YYYY-MM-DD')
         w(ws, ROW_REV_START, COL_REV_NOTES, 'PO Issued')
