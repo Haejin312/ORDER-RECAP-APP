@@ -91,8 +91,8 @@ def parse_po():
         b64 = base64.b64encode(pdf_bytes).decode()
 
         msg = client.messages.create(
-            model='claude-sonnet-4-5',
-            max_tokens=4000,
+            model='claude-haiku-4-5-20251001',
+            max_tokens=2000,
             messages=[{'role': 'user', 'content': [
                 {'type': 'document', 'source': {'type': 'base64', 'media_type': 'application/pdf', 'data': b64}},
                 {'type': 'text', 'text': '''Extract ALL data from this Carhartt PO PDF. Return ONLY valid JSON, no markdown:
@@ -160,7 +160,7 @@ def parse_bom():
         b64_pdf = base64.b64encode(pdf_bytes).decode()
 
         msg = client.messages.create(
-            model='claude-sonnet-4-5',
+            model='claude-haiku-4-5-20251001',
             max_tokens=2000,
             messages=[{'role': 'user', 'content': [
                 {'type': 'document', 'source': {'type': 'base64', 'media_type': 'application/pdf', 'data': b64_pdf}},
