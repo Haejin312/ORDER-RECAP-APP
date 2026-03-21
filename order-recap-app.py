@@ -174,7 +174,8 @@ PO TEXT:
         hts = po.get('hts', '')
         raw_desc = po.get('fabric_desc', '')
         norm_desc = normalize_fabric(raw_desc)
-        key = (hts, norm_desc)
+        # fiber content만으로 구분 (HTS 무관)
+        key = norm_desc
         if key not in slot_key_map:
             combo = f'C{combo_idx}'
             slot_key_map[key] = combo
@@ -188,7 +189,7 @@ PO TEXT:
             })
             combo_idx += 1
         po['fabric_combo'] = slot_key_map[key]
-        po['fabric_desc'] = norm_desc  # 정규화된 값으로 업데이트
+        po['fabric_desc'] = norm_desc
 
     return jsonify({'pos': results, 'fabric_slots': fabric_slots})
 
