@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ORDER RECAP MAKER — Apparel Links</title>
+<style>
+  :root {
+    --gold: #B8860B;
+    --dark: #2C2110;
+    --body: #4A3522;
+    --cream: #FAF7F0;
+    --bg: #1A1208;
+    --card: #231A0E;
+    --border: #3D2E1A;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--cream); font-family: 'Courier New', monospace; min-height: 100vh; }
+
+  header {
+    background: var(--dark);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { width: 36px; height: 36px; background: var(--gold); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  header h1 { font-size: 13px; letter-spacing: 3px; color: var(--cream); }
+  header span { color: var(--gold); font-size: 13px; letter-spacing: 3px; }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 32px 24px; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .card-title { font-size: 11px; letter-spacing: 2px; color: var(--gold); margin-bottom: 16px; }
+
+  .row { display: flex; gap: 16px; margin-bottom: 16px; }
+  .field { flex: 1; }
+  .field label { display: block; font-size: 10px; letter-spacing: 1.5px; color: #8B7355; margin-bottom: 6px; }
+  .field input, .field select {
+    width: 100%; padding: 10px 14px;
+    background: var(--dark); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--cream); font-family: inherit; font-size: 13px;
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--gold); }
+
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 32px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s;
+    position: relative;
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--gold); }
+  .upload-zone input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+  .upload-icon { font-size: 28px; margin-bottom: 8px; }
+  .upload-text { font-size: 12px; color: #8B7355; }
+  .upload-text strong { color: var(--gold); }
+
+  .file-list { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .file-tag {
+    background: var(--dark); border: 1px solid var(--border);
+    border-radius: 20px; padding: 4px 12px;
+    font-size: 11px; display: flex; align-items: center; gap: 8px;
+  }
+  .file-tag button { background: none; border: none; color: #8B7355; cursor: pointer; font-size: 14px; line-height: 1; }
+  .file-tag button:hover { color: #e74c3c; }
+
+  .btn {
+    padding: 14px 32px; border: none; border-radius: 8px;
+    font-family: inherit; font-size: 12px; letter-spacing: 2px;
+    cursor: pointer; transition: opacity 0.2s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn-primary { background: var(--gold); color: var(--dark); font-weight: bold; }
+  .btn-secondary { background: var(--dark); color: var(--gold); border: 1px solid var(--gold); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .step-indicator {
+    display: flex; gap: 8px; align-items: center; margin-bottom: 24px;
+  }
+  .step { padding: 6px 16px; border-radius: 20px; font-size: 11px; letter-spacing: 1px; }
+  .step.active { background: var(--gold); color: var(--dark); font-weight: bold; }
+  .step.done { background: #2D4A2D; color: #6BCB6B; border: 1px solid #6BCB6B; }
+  .step.pending { background: var(--dark); color: #8B7355; border: 1px solid var(--border); }
+  .step-arrow { color: var(--border); }
+
+  /* STEP 2 - 추가 정보 입력 */
+  .info-section { margin-bottom: 20px; }
+  .info-section h3 { font-size: 11px; letter-spacing: 2px; color: var(--gold); margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+
+  .color-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .color-item { display: flex; align-items: center; gap: 10px; }
+  .color-code-badge {
+    background: var(--dark); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 10px;
+    font-size: 12px; font-weight: bold; color: var(--gold);
+    min-width: 50px; text-align: center;
+  }
+  .color-item input {
+    flex: 1; padding: 8px 12px;
+    background: var(--dark); border: 1px solid var(--border);
+    border-radius: 6px; color: var(--cream); font-family: inherit; font-size: 12px;
+  }
+  .color-item input:focus { outline: none; border-color: var(--gold); }
+
+  .sketch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 16px; }
+  .sketch-item { text-align: center; }
+  .sketch-label { font-size: 11px; color: var(--gold); margin-bottom: 8px; letter-spacing: 1px; }
+  .sketch-upload {
+    border: 2px dashed var(--border); border-radius: 8px;
+    padding: 20px; cursor: pointer; position: relative;
+    transition: border-color 0.2s; min-height: 100px;
+    display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px;
+  }
+  .sketch-upload:hover { border-color: var(--gold); }
+  .sketch-upload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .sketch-upload img { max-width: 100%; max-height: 120px; border-radius: 4px; }
+  .sketch-upload .placeholder { font-size: 24px; }
+  .sketch-upload .placeholder-text { font-size: 10px; color: #8B7355; }
+
+  .fabric-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .fabric-table th { background: var(--dark); padding: 8px 10px; text-align: left; color: #8B7355; letter-spacing: 1px; border: 1px solid var(--border); }
+  .fabric-table td { padding: 6px 8px; border: 1px solid var(--border); }
+  .fabric-table input {
+    width: 100%; background: transparent; border: none;
+    color: var(--cream); font-family: inherit; font-size: 11px; padding: 2px;
+  }
+  .fabric-table input:focus { outline: none; background: var(--dark); border-radius: 4px; padding: 2px 4px; }
+
+  .add-fabric-btn {
+    margin-top: 8px; padding: 6px 16px;
+    background: transparent; border: 1px dashed var(--border);
+    border-radius: 6px; color: #8B7355; font-family: inherit; font-size: 11px;
+    cursor: pointer; transition: border-color 0.2s;
+  }
+  .add-fabric-btn:hover { border-color: var(--gold); color: var(--gold); }
+
+  /* Progress */
+  .progress { margin: 20px 0; }
+  .progress-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 0; border-bottom: 1px solid var(--border);
+    font-size: 12px;
+  }
+  .progress-item:last-child { border-bottom: none; }
+  .progress-icon { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0; }
+  .progress-icon.done { background: #2D4A2D; color: #6BCB6B; }
+  .progress-icon.loading { background: var(--dark); color: var(--gold); animation: spin 1s linear infinite; }
+  .progress-icon.pending { background: var(--dark); color: #8B7355; border: 1px solid var(--border); }
+  .progress-icon.error { background: #4A1A1A; color: #e74c3c; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .po-summary { background: var(--dark); border-radius: 8px; padding: 16px; margin-top: 16px; }
+  .po-summary-title { font-size: 10px; letter-spacing: 2px; color: #8B7355; margin-bottom: 12px; }
+  .po-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .po-table th { color: #8B7355; padding: 4px 8px; text-align: left; border-bottom: 1px solid var(--border); }
+  .po-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  .po-table tr:last-child td { border-bottom: none; }
+
+  .alert { padding: 12px 16px; border-radius: 8px; font-size: 12px; margin-bottom: 16px; }
+  .alert-error { background: #2A0A0A; border: 1px solid #e74c3c; color: #e74c3c; }
+  .alert-success { background: #0A2A0A; border: 1px solid #6BCB6B; color: #6BCB6B; }
+
+  #step2 { display: none; }
+  #step3 { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">📋</div>
+  <h1>APPAREL LINKS</h1>
+  <span>·</span>
+  <span>ORDER RECAP MAKER</span>
+</header>
+
+<div class="container">
+
+  <!-- Step Indicator -->
+  <div class="step-indicator">
+    <div class="step active" id="ind1">① PO 업로드</div>
+    <div class="step-arrow">→</div>
+    <div class="step pending" id="ind2">② 추가 정보 입력</div>
+    <div class="step-arrow">→</div>
+    <div class="step pending" id="ind3">③ 최종 생성</div>
+  </div>
+
+  <!-- ───── STEP 1 ───── -->
+  <div id="step1">
+    <div class="card">
+      <div class="card-title">📁 기본 정보</div>
+      <div class="row">
+        <div class="field">
+          <label>FILE #</label>
+          <input type="text" id="fileNo" placeholder="예: AL-2026-001">
+        </div>
+        <div class="field">
+          <label>VENDOR #</label>
+          <input type="text" id="vendorNo" value="907697">
+        </div>
+        <div class="field">
+          <label>SEWING</label>
+          <input type="text" id="sewing" value="Apparel Links">
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📄 PO 장 업로드</div>
+      <div class="upload-zone" id="poZone">
+        <input type="file" id="poFiles" multiple accept=".pdf" onchange="addFiles('po', this)">
+        <div class="upload-icon">📄</div>
+        <div class="upload-text">클릭 또는 <strong>드래그</strong>하여 PO PDF 추가<br>여러 개 동시 업로드 가능</div>
+      </div>
+      <div class="file-list" id="poFileList"></div>
+    </div>
+
+    <div id="step1Error"></div>
+
+    <button class="btn btn-primary" onclick="runStep1()" id="btnStep1">▶ 1단계: PO 분석 시작</button>
+
+    <div id="step1Progress" style="display:none">
+      <div class="card" style="margin-top:20px">
+        <div class="card-title">처리 중...</div>
+        <div class="progress" id="progressItems"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───── STEP 2 ───── -->
+  <div id="step2">
+    <div class="card">
+      <div class="card-title">✅ PO 분석 완료</div>
+      <div class="po-summary" id="poSummary"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🎨 COLOR NAME 입력</div>
+      <p style="font-size:11px;color:#8B7355;margin-bottom:14px">PO에서 발견된 Color Code별로 Color Name을 입력해주세요.</p>
+      <div class="color-grid" id="colorGrid"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🖼 스케치 업로드</div>
+      <p style="font-size:11px;color:#8B7355;margin-bottom:14px">Style별 Front Sketch 이미지를 업로드해주세요.</p>
+      <div class="sketch-grid" id="sketchGrid"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🧵 FABRIC COMBINATION</div>
+      <p style="font-size:11px;color:#8B7355;margin-bottom:14px">Body & Trim Fabric Combination을 입력해주세요.</p>
+      <table class="fabric-table">
+        <thead>
+          <tr>
+            <th>COMBO</th>
+            <th>BODY CODE</th>
+            <th>BODY DESC</th>
+            <th>TRIM CODE</th>
+            <th>TRIM DESC</th>
+            <th>HS CODE</th>
+          </tr>
+        </thead>
+        <tbody id="fabricBody">
+          <tr>
+            <td><input type="text" placeholder="C1" value="C1"></td>
+            <td><input type="text" placeholder="JE002"></td>
+            <td><input type="text" placeholder="6.75oz 100% Cotton Jersey"></td>
+            <td><input type="text" placeholder="RB002"></td>
+            <td><input type="text" placeholder="8.9oz 1x1 Rib Knit"></td>
+            <td><input type="text" placeholder="6105.10.0010"></td>
+          </tr>
+        </tbody>
+      </table>
+      <button class="add-fabric-btn" onclick="addFabricRow()">+ 행 추가</button>
+    </div>
+
+    <div id="step2Error"></div>
+    <button class="btn btn-primary" onclick="runStep2()">▶ 최종 Order Recap 생성</button>
+  </div>
+
+  <!-- ───── STEP 3 ───── -->
+  <div id="step3">
+    <div class="card">
+      <div class="card-title">🎉 완료!</div>
+      <div class="alert alert-success" id="successMsg"></div>
+      <button class="btn btn-primary" onclick="downloadFile()" id="btnDownload">⬇ Excel 다운로드</button>
+      <button class="btn btn-secondary" onclick="resetAll()" style="margin-left:12px">+ 새 Recap 만들기</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── 상태 ──────────────────────────────────────────────────
+let poFiles = [];
+let parsedPos = [];
+let sketchFiles = {};
+let xlsxB64 = '';
+let xlsxFilename = '';
+
+const settings = JSON.parse(localStorage.getItem('orSettings') || '{}');
+
+// ── 파일 관리 ─────────────────────────────────────────────
+function addFiles(type, input) {
+  const newFiles = Array.from(input.files);
+  if (type === 'po') {
+    newFiles.forEach(f => { if (!poFiles.find(x => x.name === f.name)) poFiles.push(f); });
+    renderFileList('poFileList', poFiles, 'po');
+  }
+  input.value = '';
+}
+
+function removeFile(type, name) {
+  if (type === 'po') { poFiles = poFiles.filter(f => f.name !== name); renderFileList('poFileList', poFiles, 'po'); }
+}
+
+function renderFileList(listId, files, type) {
+  const el = document.getElementById(listId);
+  el.innerHTML = files.map(f => `
+    <div class="file-tag">
+      📄 ${f.name}
+      <button onclick="removeFile('${type}','${f.name}')">×</button>
+    </div>`).join('');
+}
+
+// ── STEP 1 ────────────────────────────────────────────────
+async function runStep1() {
+  const apiKey = settings.apiKey;
+  const backendUrl = settings.backendUrl;
+
+  if (!apiKey || !backendUrl) { showError('step1Error', 'Settings에서 API Key와 Backend URL을 먼저 입력해주세요.'); return; }
+  if (poFiles.length === 0) { showError('step1Error', 'PO PDF를 업로드해주세요.'); return; }
+
+  document.getElementById('btnStep1').disabled = true;
+  document.getElementById('step1Progress').style.display = 'block';
+  clearError('step1Error');
+
+  const progressEl = document.getElementById('progressItems');
+  progressEl.innerHTML = `<div class="progress-item"><div class="progress-icon loading">↻</div>PO ${poFiles.length}개 분석 중... (파일당 약 3초)</div>`;
+
+  try {
+    const fd = new FormData();
+    poFiles.forEach(f => fd.append('files', f));
+
+    const res = await fetch(`${backendUrl}/parse-po`, {
+      method: 'POST',
+      headers: { 'X-Api-Key': apiKey },
+      body: fd
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'PO 파싱 실패');
+    }
+
+    const data = await res.json();
+    parsedPos = data.pos;
+
+    progressEl.innerHTML = `<div class="progress-item"><div class="progress-icon done">✓</div>PO ${parsedPos.length}개 분석 완료!</div>`;
+
+    setTimeout(() => buildStep2(), 800);
+
+  } catch (e) {
+    progressEl.innerHTML = `<div class="progress-item"><div class="progress-icon error">✗</div>${e.message}</div>`;
+    document.getElementById('btnStep1').disabled = false;
+  }
+}
+
+function buildStep2() {
+  // PO 요약 테이블
+  const sorted = [...parsedPos].sort((a, b) => {
+    const da = parseDate(a.ex_factory_date), db = parseDate(b.ex_factory_date);
+    return da && db ? da - db : 0;
+  });
+
+  let tableHtml = `<div class="po-summary-title">분석된 PO ${sorted.length}개</div>
+    <table class="po-table">
+      <thead><tr><th>PO#</th><th>Style</th><th>Color</th><th>Ex-Factory</th><th>Ship To</th><th>PCS</th></tr></thead>
+      <tbody>`;
+  sorted.forEach(p => {
+    tableHtml += `<tr>
+      <td>${p.po_number}</td>
+      <td>${p.style}</td>
+      <td>${p.color_code}</td>
+      <td>${p.ex_factory_date}</td>
+      <td>${p.ship_to}</td>
+      <td>${(p.total_pcs||0).toLocaleString()}</td>
+    </tr>`;
+  });
+  tableHtml += '</tbody></table>';
+  document.getElementById('poSummary').innerHTML = tableHtml;
+
+  // Color 목록
+  const colorMap = {};
+  parsedPos.forEach(p => { if (p.color_code) colorMap[p.color_code] = ''; });
+  const colorGrid = document.getElementById('colorGrid');
+  colorGrid.innerHTML = Object.keys(colorMap).sort().map(code => `
+    <div class="color-item">
+      <div class="color-code-badge">${code}</div>
+      <input type="text" id="color_${code}" placeholder="Color Name" oninput="colorMap['${code}']=this.value">
+    </div>`).join('');
+  window._colorMap = colorMap;
+
+  // Style 스케치
+  const styles = [...new Set(parsedPos.map(p => p.style))];
+  const sketchGrid = document.getElementById('sketchGrid');
+  sketchGrid.innerHTML = styles.map(style => `
+    <div class="sketch-item">
+      <div class="sketch-label">${style}</div>
+      <div class="sketch-upload" id="sketchZone_${style}">
+        <input type="file" accept="image/*" onchange="handleSketch('${style}', this)">
+        <div class="placeholder">🖼</div>
+        <div class="placeholder-text">클릭하여 업로드</div>
+      </div>
+    </div>`).join('');
+
+  // Step 전환
+  document.getElementById('step1').style.display = 'none';
+  document.getElementById('step2').style.display = 'block';
+  document.getElementById('ind1').className = 'step done';
+  document.getElementById('ind2').className = 'step active';
+  window.scrollTo(0, 0);
+}
+
+function handleSketch(style, input) {
+  const file = input.files[0];
+  if (!file) return;
+  sketchFiles[style] = file;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const zone = document.getElementById(`sketchZone_${style}`);
+    zone.innerHTML = `<input type="file" accept="image/*" onchange="handleSketch('${style}', this)">
+      <img src="${e.target.result}" alt="${style}">`;
+  };
+  reader.readAsDataURL(file);
+}
+
+// ── STEP 2 ────────────────────────────────────────────────
+async function runStep2() {
+  const apiKey = settings.apiKey;
+  const backendUrl = settings.backendUrl;
+
+  clearError('step2Error');
+
+  // Color names 수집
+  const colorNames = {};
+  document.querySelectorAll('[id^="color_"]').forEach(el => {
+    const code = el.id.replace('color_', '');
+    colorNames[code] = el.value.trim();
+  });
+
+  // Fabric 수집
+  const fabrics = [];
+  document.querySelectorAll('#fabricBody tr').forEach(tr => {
+    const inputs = tr.querySelectorAll('input');
+    if (inputs[0].value.trim()) {
+      fabrics.push({
+        combo: inputs[0].value.trim(),
+        body_code: inputs[1].value.trim(),
+        body_desc: inputs[2].value.trim(),
+        trim_code: inputs[3].value.trim(),
+        trim_desc: inputs[4].value.trim(),
+        hs_code:   inputs[5].value.trim()
+      });
+    }
+  });
+
+  const fd = new FormData();
+  fd.append('pos', JSON.stringify(parsedPos));
+  fd.append('extras', JSON.stringify({ color_names: colorNames, fabrics: fabrics }));
+  fd.append('fileNo', document.getElementById('fileNo').value);
+  fd.append('vendorNo', document.getElementById('vendorNo').value);
+  fd.append('sewing', document.getElementById('sewing').value);
+  fd.append('today', new Date().toISOString().split('T')[0]);
+
+  // 스케치 파일 첨부
+  Object.entries(sketchFiles).forEach(([style, file]) => {
+    fd.append(`sketch_${style}`, file);
+  });
+
+  document.querySelector('#step2 .btn').disabled = true;
+  document.querySelector('#step2 .btn').textContent = '생성 중...';
+
+  try {
+    const res = await fetch(`${backendUrl}/build-excel`, {
+      method: 'POST',
+      headers: { 'X-Api-Key': apiKey },
+      body: fd
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Excel 생성 실패');
+    }
+
+    const data = await res.json();
+    xlsxB64 = data.xlsx_b64;
+    xlsxFilename = data.filename;
+
+    document.getElementById('step2').style.display = 'none';
+    document.getElementById('step3').style.display = 'block';
+    document.getElementById('ind2').className = 'step done';
+    document.getElementById('ind3').className = 'step active';
+    document.getElementById('successMsg').textContent = `✓ ${xlsxFilename} 생성 완료!`;
+    window.scrollTo(0, 0);
+
+  } catch (e) {
+    showError('step2Error', e.message);
+    document.querySelector('#step2 .btn').disabled = false;
+    document.querySelector('#step2 .btn').textContent = '▶ 최종 Order Recap 생성';
+  }
+}
+
+// ── 다운로드 ──────────────────────────────────────────────
+function downloadFile() {
+  const bin = atob(xlsxB64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = xlsxFilename;
+  a.click();
+}
+
+function resetAll() {
+  poFiles = []; parsedPos = []; sketchFiles = {}; xlsxB64 = ''; xlsxFilename = '';
+  document.getElementById('step1').style.display = 'block';
+  document.getElementById('step2').style.display = 'none';
+  document.getElementById('step3').style.display = 'none';
+  document.getElementById('step1Progress').style.display = 'none';
+  document.getElementById('btnStep1').disabled = false;
+  document.getElementById('poFileList').innerHTML = '';
+  document.getElementById('ind1').className = 'step active';
+  document.getElementById('ind2').className = 'step pending';
+  document.getElementById('ind3').className = 'step pending';
+  window.scrollTo(0, 0);
+}
+
+function addFabricRow() {
+  const tr = document.createElement('tr');
+  tr.innerHTML = ['C2','','','','',''].map((v,i) =>
+    `<td><input type="text" placeholder="${['C2','code','description','code','description','0000.00.0000'][i]}" value="${v}"></td>`
+  ).join('');
+  document.getElementById('fabricBody').appendChild(tr);
+}
+
+function parseDate(s) {
+  if (!s) return null;
+  try {
+    if (s.includes('/')) { const [m,d,y] = s.split('/'); return new Date(y,m-1,d); }
+    return new Date(s);
+  } catch { return null; }
+}
+
+function showError(id, msg) { document.getElementById(id).innerHTML = `<div class="alert alert-error">⚠ ${msg}</div>`; }
+function clearError(id) { document.getElementById(id).innerHTML = ''; }
+
+// ── Settings 버튼 ─────────────────────────────────────────
+const settingsBtn = document.createElement('button');
+settingsBtn.className = 'btn btn-secondary';
+settingsBtn.style.cssText = 'position:fixed;bottom:24px;right:24px;font-size:11px;padding:10px 20px;z-index:999';
+settingsBtn.textContent = '⚙ Settings';
+settingsBtn.onclick = () => {
+  const key = prompt('Anthropic API Key:', settings.apiKey || '');
+  if (key !== null) {
+    const url = prompt('Backend URL:', settings.backendUrl || 'https://order-recap-app.onrender.com');
+    if (url !== null) {
+      settings.apiKey = key;
+      settings.backendUrl = url;
+      localStorage.setItem('orSettings', JSON.stringify(settings));
+      alert('설정이 저장되었습니다.');
+    }
+  }
+};
+document.body.appendChild(settingsBtn);
+</script>
+</body>
+</html>
