@@ -231,7 +231,7 @@ def build_excel():
         today   = data.get('today', datetime.date.today().isoformat())
 
         wb, ws = get_template_ws()
-
+        pos.sort(key=lambda p: parse_date(p.get('ex_factory_date', '')) or datetime.date.max)
         # 헤더
         w(ws, ROW_FILE_NO, 3, file_no)
         w(ws, ROW_VENDOR,  3, vendor)
