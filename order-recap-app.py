@@ -18,9 +18,7 @@ ROW_FILE_NO   = 1
 ROW_SEASON    = 2
 ROW_VENDOR    = 3
 ROW_SEWING    = 4
-
 ROW_C = {'C1': 11, 'C2': 12, 'C3': 13, 'C4': 14}
-
 ROW_PO       = 17
 ROW_UNIT     = 18
 ROW_EX       = 19
@@ -31,25 +29,22 @@ ROW_COLOR    = 23
 ROW_FABRIC   = 24
 ROW_SHIP     = 25
 ROW_MODE     = 26
-
 SIZE_ROWS = {
     'XS': 30, 'S': 31, 'M': 32, 'L': 33, 'XL': 34, '2XL': 35,
     '3XL': 36, '4XL': 37, '5XL': 38, '6XL': 39,
     'LTLL': 40, 'XLTLL': 41, '2XLTLL': 42, '3XLTLL': 43, '4XLTLL': 44, '5XLTLL': 45
 }
-
-def pcs_col(slot_idx): return 3 + slot_idx * 2
-def fob_col(slot_idx): return 4 + slot_idx * 2
-def style_header_col(style_idx): return 16 + style_idx * 3
-
 ROW_REV_START = 9
 COL_REV_DATE  = 29
 COL_REV_NOTES = 30
 
+def pcs_col(i): return 3 + i * 2
+def fob_col(i): return 4 + i * 2
+def style_header_col(i): return 16 + i * 3
+
 def get_template_ws():
     wb = load_workbook(TEMPLATE_PATH)
-    ws = wb.worksheets[0]
-    return wb, ws
+    return wb, wb.worksheets[0]
 
 def w(ws, row, col, val, fmt=None):
     cell = ws.cell(row=row, column=col)
@@ -65,25 +60,22 @@ def w(ws, row, col, val, fmt=None):
         cell.number_format = fmt
 
 def parse_date(s):
-    if not s:
-        return None
+    if not s: return None
     try:
         if '/' in str(s):
             return datetime.datetime.strptime(str(s), '%m/%d/%Y').date()
         return datetime.date.fromisoformat(str(s))
-    except Exception:
+    except:
         return None
 
-def extract_text_from_pdf(pdf_bytes):
-    """PyMuPDF로 PDF에서 텍스트만 추출 (토큰 절약)"""
+def extract_pdf_text(pdf_bytes):
     doc = fitz.open(stream=pdf_bytes, filetype='pdf')
-    text = ''
-    for page in doc:
-        text += page.get_text()
+    text = ''.join(page.get_text() for page in doc)
     doc.close()
-    return text[:8000]  # 최대 8000자로 제한
+    return text[:6000]
 
 
+# ── STEP 1: PO만 파싱 ──────────────────────────────────────
 @app.route('/parse-po', methods=['POST'])
 def parse_po():
     api_key = request.headers.get('X-Api-Key')
@@ -96,16 +88,15 @@ def parse_po():
 
     for f in files:
         pdf_bytes = f.read()
-        b64 = base64.b64encode(pdf_bytes).decode()
+        pdf_text = extract_pdf_text(pdf_bytes)
 
         msg = client.messages.create(
             model='claude-sonnet-4-5',
             max_tokens=1500,
             messages=[{'role': 'user', 'content': [
-                {'type': 'document', 'source': {'type': 'base64', 'media_type': 'application/pdf', 'data': b64}},
-                {'type': 'text', 'text': '''Extract ALL data from this Carhartt PO PDF. Return ONLY valid JSON, no markdown:
+                {'type': 'text', 'text': f'''Extract ALL data from this Carhartt PO text. Return ONLY valid JSON:
 
-{
+{{
   "po_number": "3510042802",
   "season": "F24",
   "ex_factory_date": "04/28/2024",
@@ -115,36 +106,39 @@ def parse_po():
   "ship_to": "Carhartt Inc",
   "ship_mode": "S-Ocean",
   "hts": "6110.20.2069",
-  "sizes": {
-    "XS": {"pcs": 4, "fob": 4.87},
-    "S": {"pcs": 32, "fob": 4.87},
-    "M": {"pcs": 277, "fob": 4.87},
-    "L": {"pcs": 373, "fob": 4.87},
-    "XL": {"pcs": 292, "fob": 4.87},
-    "2XL": {"pcs": 170, "fob": 4.87},
-    "3XL": {"pcs": 101, "fob": 5.75},
-    "4XL": {"pcs": 19, "fob": 5.75},
-    "5XL": {"pcs": 9, "fob": 5.75},
-    "6XL": {"pcs": 0, "fob": 0},
-    "LTLL": {"pcs": 14, "fob": 5.48},
-    "XLTLL": {"pcs": 15, "fob": 5.48},
-    "2XLTLL": {"pcs": 14, "fob": 5.48},
-    "3XLTLL": {"pcs": 6, "fob": 5.48},
-    "4XLTLL": {"pcs": 1, "fob": 5.48},
-    "5XLTLL": {"pcs": 0, "fob": 0}
-  },
+  "sizes": {{
+    "XS": {{"pcs": 4, "fob": 4.87}},
+    "S": {{"pcs": 32, "fob": 4.87}},
+    "M": {{"pcs": 277, "fob": 4.87}},
+    "L": {{"pcs": 373, "fob": 4.87}},
+    "XL": {{"pcs": 292, "fob": 4.87}},
+    "2XL": {{"pcs": 170, "fob": 4.87}},
+    "3XL": {{"pcs": 101, "fob": 5.75}},
+    "4XL": {{"pcs": 19, "fob": 5.75}},
+    "5XL": {{"pcs": 9, "fob": 5.75}},
+    "6XL": {{"pcs": 0, "fob": 0}},
+    "LTLL": {{"pcs": 14, "fob": 5.48}},
+    "XLTLL": {{"pcs": 15, "fob": 5.48}},
+    "2XLTLL": {{"pcs": 14, "fob": 5.48}},
+    "3XLTLL": {{"pcs": 6, "fob": 5.48}},
+    "4XLTLL": {{"pcs": 1, "fob": 5.48}},
+    "5XLTLL": {{"pcs": 0, "fob": 0}}
+  }},
   "total_pcs": 1327
-}
+}}
 
 Rules:
 - style: style number only (e.g. "K126", "K128", "K231")
-- color_code: color code only after hyphen (K231-PRT -> "PRT", K128-BLK -> "BLK")
+- color_code: color code only after last hyphen in SKU (K231-PRT->"PRT", K128-BLK->"BLK", K126-HH5->"HH5")
 - XSREG->XS, MREG->M, 2XLREG->2XL (strip REG suffix)
 - LTLL->LTLL, 2XLTLL->2XLTLL (keep TLL suffix)
 - pcs=0, fob=0 for sizes not in PO
 - ship_to: first line only ("Carhartt DC5" or "Carhartt Inc")
 - ship_mode: "S-Ocean" for ocean, "Air" for air
-- Return ONLY the JSON'''}
+- Return ONLY the JSON
+
+PO TEXT:
+{pdf_text}'''}
             ]}]
         )
 
@@ -157,82 +151,36 @@ Rules:
     return jsonify({'pos': results})
 
 
-@app.route('/parse-bom', methods=['POST'])
-def parse_bom():
-    api_key = request.headers.get('X-Api-Key')
-    if not api_key:
-        return jsonify({'error': 'API key required'}), 401
-
-    files = request.files.getlist('files')
-    bom_map = {}
-    client = anthropic.Anthropic(api_key=api_key)
-
-    for f in files:
-        pdf_bytes = f.read()
-
-        # PDF에서 텍스트만 추출 (토큰 절약 - PDF 통째로 안 보냄)
-        pdf_text = extract_text_from_pdf(pdf_bytes)
-
-        msg = client.messages.create(
-            model='claude-sonnet-4-5',
-            max_tokens=1000,
-            messages=[{'role': 'user', 'content': [
-                {'type': 'text', 'text': f'''Extract from this Carhartt BOM text. Return ONLY valid JSON:
-
-{{"style": "K128",
-  "active_colorways": {{"BLK": "Black", "NVY": "Navy", "CRH": "Carbon Heather", "HGY": "Heather Grey"}},
-  "fabrics": [{{"combo": "C1", "body_code": "JE002", "body_desc": "6.75oz 100% Cotton Jersey Solid Only", "trim_code": "RB002", "trim_desc": "8.9oz 1x1 Rib Knit Solid Only", "hs_code": "6105.10.0010"}}]
-}}
-
-Rules:
-- style: style number only (e.g. "K128")
-- active_colorways: find "Active Colorways" section, CODE is 2-4 uppercase letters only
-- fabrics: match C1-C4 combos from Composition section
-- Return ONLY the JSON
-
-BOM TEXT:
-{pdf_text}'''}
-            ]}]
-        )
-
-        text = msg.content[0].text.strip()
-        clean = re.sub(r'```json|```', '', text).strip()
-        bom = json.loads(clean)
-
-        # 스케치 이미지 추출
-        doc = fitz.open(stream=pdf_bytes, filetype='pdf')
-        page = doc[0]
-        images = page.get_images(full=True)
-        sketch_b64 = None
-        if images:
-            try:
-                xref = images[0][0]
-                base_img = doc.extract_image(xref)
-                sketch_b64 = base64.b64encode(base_img['image']).decode()
-            except Exception:
-                pass
-        doc.close()
-
-        bom['sketch_b64'] = sketch_b64
-        time.sleep(3)
-        bom_map[bom['style']] = bom
-
-    return jsonify(bom_map)
-
-
+# ── STEP 2: Excel 생성 (스케치/컬러/패브릭 포함) ──────────
 @app.route('/build-excel', methods=['POST'])
 def build_excel():
     if not os.path.exists(TEMPLATE_PATH):
-        return jsonify({'error': f'Template not found: {TEMPLATE_PATH}'}), 500
+        return jsonify({'error': 'Template not found'}), 500
 
     try:
-        data    = request.json
-        file_no = data.get('fileNo', '')
-        pos     = data.get('pos', [])
-        bom_map = data.get('bom', {})
-        vendor  = data.get('vendorNo', '907697')
-        sewing  = data.get('sewing', 'Apparel Links')
-        today   = data.get('today', datetime.date.today().isoformat())
+        # JSON 데이터
+        pos     = json.loads(request.form.get('pos', '[]'))
+        extras  = json.loads(request.form.get('extras', '{}'))
+        file_no = request.form.get('fileNo', '')
+        vendor  = request.form.get('vendorNo', '907697')
+        sewing  = request.form.get('sewing', 'Apparel Links')
+        today   = request.form.get('today', datetime.date.today().isoformat())
+
+        # extras 구조:
+        # { "color_names": {"HH5": "Heather Stone", ...},
+        #   "fabrics": [{"combo":"C1","body_code":"...","body_desc":"...","trim_code":"...","trim_desc":"...","hs_code":"..."}],
+        #   "sketches": {"K126": "base64...", "K128": "base64..."} }
+
+        color_names = extras.get('color_names', {})
+        fabrics     = extras.get('fabrics', [])
+        sketches    = extras.get('sketches', {})
+
+        # 업로드된 스케치 이미지 파일 처리
+        for key in request.files:
+            if key.startswith('sketch_'):
+                style = key.replace('sketch_', '')
+                img_bytes = request.files[key].read()
+                sketches[style] = base64.b64encode(img_bytes).decode()
 
         wb, ws = get_template_ws()
 
@@ -244,26 +192,18 @@ def build_excel():
         if pos:
             w(ws, ROW_SEASON, 3, pos[0].get('season', ''))
 
-        all_fabrics = []
-        seen = set()
-        for bom in bom_map.values():
-            for fab in bom.get('fabrics', []):
-                key = fab.get('combo', '')
-                if key not in seen:
-                    all_fabrics.append(fab)
-                    seen.add(key)
-        all_fabrics.sort(key=lambda x: x.get('combo', ''))
-
-        for fab in all_fabrics:
+        # Fabric Combination
+        fabrics.sort(key=lambda x: x.get('combo', ''))
+        for fab in fabrics:
             row = ROW_C.get(fab.get('combo', ''))
-            if not row:
-                continue
+            if not row: continue
             w(ws, row, 3,  fab.get('body_code', ''))
             w(ws, row, 4,  fab.get('body_desc', ''))
             w(ws, row, 7,  fab.get('trim_code', ''))
             w(ws, row, 8,  fab.get('trim_desc', ''))
             w(ws, row, 11, fab.get('hs_code', ''))
 
+        # Style# 헤더 + 스케치
         TARGET_W_PX = round(5 / 2.54 * 96)
         style_idx_map = {}
 
@@ -275,37 +215,34 @@ def build_excel():
                 hcol = style_header_col(idx)
                 w(ws, 3, hcol, style)
 
-                bom = bom_map.get(style, {})
-                sketch_b64 = bom.get('sketch_b64')
+                sketch_b64 = sketches.get(style)
                 if sketch_b64:
                     try:
                         img_bytes = base64.b64decode(sketch_b64)
                         pil = PILImage.open(io.BytesIO(img_bytes))
-                        orig_w, orig_h = pil.size
-                        target_h = round(TARGET_W_PX * orig_h / orig_w)
-                        pil = pil.resize((TARGET_W_PX, target_h), PILImage.LANCZOS)
+                        ow, oh = pil.size
+                        th = round(TARGET_W_PX * oh / ow)
+                        pil = pil.resize((TARGET_W_PX, th), PILImage.LANCZOS)
                         buf = io.BytesIO()
                         pil.save(buf, format='PNG')
                         buf.seek(0)
                         xl_img = XLImage(buf)
                         xl_img.anchor = f'{get_column_letter(hcol)}4'
                         xl_img.width  = TARGET_W_PX
-                        xl_img.height = target_h
+                        xl_img.height = th
                         ws.add_image(xl_img)
-                    except Exception:
+                    except:
                         pass
 
+        # PO 데이터
         for slot_idx, po in enumerate(pos):
-            if slot_idx >= 16:
-                break
-
+            if slot_idx >= 16: break
             cp = pcs_col(slot_idx)
             cf = fob_col(slot_idx)
 
-            style      = po.get('style', '')
-            color      = po.get('color_code', '')
-            bom        = bom_map.get(style, {})
-            color_name = bom.get('active_colorways', {}).get(color, '')
+            style  = po.get('style', '')
+            color  = po.get('color_code', '')
+            color_name = color_names.get(color, '')
 
             w(ws, ROW_PO,       cp, po.get('po_number', ''))
             w(ws, ROW_UNIT,     cp, po.get('total_pcs', 0))
@@ -316,16 +253,15 @@ def build_excel():
             w(ws, ROW_MODE,     cp, po.get('ship_mode', 'S-Ocean'))
 
             ex = parse_date(po.get('ex_factory_date'))
-            if ex:
-                w(ws, ROW_EX, cp, ex, 'MM/DD/YYYY')
+            if ex: w(ws, ROW_EX, cp, ex, 'MM/DD/YYYY')
 
             dlv = parse_date(po.get('delivery_date'))
-            if dlv:
-                w(ws, ROW_DLV, cp, dlv, 'MM/DD/YYYY')
+            if dlv: w(ws, ROW_DLV, cp, dlv, 'MM/DD/YYYY')
 
+            # Fabric combo (HTS 기준)
             hts = po.get('hts', '')
             fabric_combo = 'C1'
-            for fab in all_fabrics:
+            for fab in fabrics:
                 if fab.get('hs_code') == hts:
                     fabric_combo = fab.get('combo', 'C1')
                     break
@@ -333,14 +269,15 @@ def build_excel():
 
             sizes = po.get('sizes', {})
             for sz, row in SIZE_ROWS.items():
-                sz_data = sizes.get(sz, {})
-                pcs = sz_data.get('pcs', 0)
-                fob = sz_data.get('fob', 0)
+                sd = sizes.get(sz, {})
+                pcs = sd.get('pcs', 0)
+                fob = sd.get('fob', 0)
                 w(ws, row, cp, pcs if pcs else None)
                 w(ws, row, cf, fob if fob else None)
 
-        today_date = parse_date(today) or datetime.date.today()
-        w(ws, ROW_REV_START, COL_REV_DATE,  today_date, 'YYYY-MM-DD')
+        # Revision History
+        td = parse_date(today) or datetime.date.today()
+        w(ws, ROW_REV_START, COL_REV_DATE,  td, 'YYYY-MM-DD')
         w(ws, ROW_REV_START, COL_REV_NOTES, 'PO Issued')
 
         buf = io.BytesIO()
@@ -348,10 +285,7 @@ def build_excel():
         buf.seek(0)
         xlsx_b64 = base64.b64encode(buf.read()).decode()
 
-        return jsonify({
-            'xlsx_b64': xlsx_b64,
-            'filename': f'OrderRecap_{file_no}_{today}.xlsx'
-        })
+        return jsonify({'xlsx_b64': xlsx_b64, 'filename': f'OrderRecap_{file_no}_{today}.xlsx'})
 
     except Exception as e:
         import traceback
@@ -361,7 +295,6 @@ def build_excel():
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({'status': 'ok', 'template': os.path.exists(TEMPLATE_PATH)})
-
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
