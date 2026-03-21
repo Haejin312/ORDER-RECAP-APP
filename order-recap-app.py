@@ -75,7 +75,6 @@ def extract_pdf_text(pdf_bytes):
     return text[:6000]
 
 
-# ── STEP 1: PO만 파싱 ──────────────────────────────────────
 @app.route('/parse-po', methods=['POST'])
 def parse_po():
     api_key = request.headers.get('X-Api-Key')
@@ -92,7 +91,7 @@ def parse_po():
 
         msg = client.messages.create(
             model='claude-sonnet-4-5',
-            max_tokens=1500,
+            max_tokens=2000,
             messages=[{'role': 'user', 'content': [
                 {'type': 'text', 'text': f'''Extract ALL data from this Carhartt PO text. Return ONLY valid JSON:
 
@@ -105,7 +104,8 @@ def parse_po():
   "color_code": "HH5",
   "ship_to": "Carhartt Inc",
   "ship_mode": "S-Ocean",
-  "hts": "6110.20.2069",
+  "hts": "6105.10.0010",
+  "fabric_desc": "100% COTTON KNIT",
   "sizes": {{
     "XS": {{"pcs": 4, "fob": 4.87}},
     "S": {{"pcs": 32, "fob": 4.87}},
@@ -129,7 +129,9 @@ def parse_po():
 
 Rules:
 - style: style number only (e.g. "K126", "K128", "K231")
-- color_code: color code only after last hyphen in SKU (K231-PRT->"PRT", K128-BLK->"BLK", K126-HH5->"HH5")
+- color_code: color code only after last hyphen in SKU (K128-BLK->"BLK", K126-HH5->"HH5")
+- hts: HTS code from "HTS:XXXX" format (e.g. "6105.10.0010")
+- fabric_desc: fiber content description from HTS line (e.g. "100% COTTON KNIT", "60% COTTON 40% POLYESTER KNIT", "90% COTTON 10% POLYESTER KNIT")
 - XSREG->XS, MREG->M, 2XLREG->2XL (strip REG suffix)
 - LTLL->LTLL, 2XLTLL->2XLTLL (keep TLL suffix)
 - pcs=0, fob=0 for sizes not in PO
@@ -148,17 +150,44 @@ PO TEXT:
         time.sleep(3)
         results.append(po)
 
-    return jsonify({'pos': results})
+    # HTS별로 fabric_desc 수집 (중복 제거)
+    hts_map = {}
+    for po in results:
+        hts = po.get('hts', '')
+        desc = po.get('fabric_desc', '')
+        if hts and hts not in hts_map:
+            hts_map[hts] = desc
+
+    # fabric 슬롯 자동 배정 (C1, C2, C3...)
+    fabric_slots = []
+    for i, (hts, desc) in enumerate(hts_map.items()):
+        combo = f'C{i+1}'
+        fabric_slots.append({
+            'combo': combo,
+            'hts': hts,
+            'body_desc': desc,
+            'body_code': '',
+            'trim_code': '',
+            'trim_desc': ''
+        })
+
+    # 각 PO에 combo 배정
+    for po in results:
+        hts = po.get('hts', '')
+        for slot in fabric_slots:
+            if slot['hts'] == hts:
+                po['fabric_combo'] = slot['combo']
+                break
+
+    return jsonify({'pos': results, 'fabric_slots': fabric_slots})
 
 
-# ── STEP 2: Excel 생성 (스케치/컬러/패브릭 포함) ──────────
 @app.route('/build-excel', methods=['POST'])
 def build_excel():
     if not os.path.exists(TEMPLATE_PATH):
         return jsonify({'error': 'Template not found'}), 500
 
     try:
-        # JSON 데이터
         pos     = json.loads(request.form.get('pos', '[]'))
         extras  = json.loads(request.form.get('extras', '{}'))
         file_no = request.form.get('fileNo', '')
@@ -166,16 +195,10 @@ def build_excel():
         sewing  = request.form.get('sewing', 'Apparel Links')
         today   = request.form.get('today', datetime.date.today().isoformat())
 
-        # extras 구조:
-        # { "color_names": {"HH5": "Heather Stone", ...},
-        #   "fabrics": [{"combo":"C1","body_code":"...","body_desc":"...","trim_code":"...","trim_desc":"...","hs_code":"..."}],
-        #   "sketches": {"K126": "base64...", "K128": "base64..."} }
-
         color_names = extras.get('color_names', {})
         fabrics     = extras.get('fabrics', [])
         sketches    = extras.get('sketches', {})
 
-        # 업로드된 스케치 이미지 파일 처리
         for key in request.files:
             if key.startswith('sketch_'):
                 style = key.replace('sketch_', '')
@@ -183,7 +206,6 @@ def build_excel():
                 sketches[style] = base64.b64encode(img_bytes).decode()
 
         wb, ws = get_template_ws()
-
         pos.sort(key=lambda p: parse_date(p.get('ex_factory_date', '')) or datetime.date.max)
 
         w(ws, ROW_FILE_NO, 3, file_no)
@@ -201,7 +223,7 @@ def build_excel():
             w(ws, row, 4,  fab.get('body_desc', ''))
             w(ws, row, 7,  fab.get('trim_code', ''))
             w(ws, row, 8,  fab.get('trim_desc', ''))
-            w(ws, row, 11, fab.get('hs_code', ''))
+            w(ws, row, 11, fab.get('hts', ''))
 
         # Style# 헤더 + 스케치
         TARGET_W_PX = round(5 / 2.54 * 96)
@@ -240,8 +262,8 @@ def build_excel():
             cp = pcs_col(slot_idx)
             cf = fob_col(slot_idx)
 
-            style  = po.get('style', '')
-            color  = po.get('color_code', '')
+            style      = po.get('style', '')
+            color      = po.get('color_code', '')
             color_name = color_names.get(color, '')
 
             w(ws, ROW_PO,       cp, po.get('po_number', ''))
@@ -258,14 +280,7 @@ def build_excel():
             dlv = parse_date(po.get('delivery_date'))
             if dlv: w(ws, ROW_DLV, cp, dlv, 'MM/DD/YYYY')
 
-            # Fabric combo (HTS 기준)
-            hts = po.get('hts', '')
-            fabric_combo = 'C1'
-            for fab in fabrics:
-                if fab.get('hs_code') == hts:
-                    fabric_combo = fab.get('combo', 'C1')
-                    break
-            w(ws, ROW_FABRIC, cp, fabric_combo)
+            w(ws, ROW_FABRIC, cp, po.get('fabric_combo', 'C1'))
 
             sizes = po.get('sizes', {})
             for sz, row in SIZE_ROWS.items():
@@ -275,7 +290,6 @@ def build_excel():
                 w(ws, row, cp, pcs if pcs else None)
                 w(ws, row, cf, fob if fob else None)
 
-        # Revision History
         td = parse_date(today) or datetime.date.today()
         w(ws, ROW_REV_START, COL_REV_DATE,  td, 'YYYY-MM-DD')
         w(ws, ROW_REV_START, COL_REV_NOTES, 'PO Issued')
