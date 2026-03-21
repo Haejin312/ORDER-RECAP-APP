@@ -142,7 +142,7 @@ Rules:
         text = msg.content[0].text.strip()
         clean = re.sub(r'```json|```', '', text).strip()
         po = json.loads(clean)
-        time.sleep(2)
+        time.sleep(10)
         results.append(po)
 
     return jsonify({'pos': results})
@@ -215,7 +215,7 @@ Rules:
         doc.close()
 
         bom['sketch_b64'] = sketch_b64
-        time.sleep(2)
+        time.sleep(10)
         bom_map[bom['style']] = bom
 
     return jsonify(bom_map)
