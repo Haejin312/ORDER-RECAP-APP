@@ -202,10 +202,13 @@ def build_excel():
     try:
         pos     = json.loads(request.form.get('pos', '[]'))
         extras  = json.loads(request.form.get('extras', '{}'))
-        file_no = request.form.get('fileNo', '')
-        vendor  = request.form.get('vendorNo', '907697')
-        sewing  = request.form.get('sewing', 'Apparel Links')
-        today   = request.form.get('today', datetime.date.today().isoformat())
+        file_no     = request.form.get('fileNo', '')
+        vendor      = request.form.get('vendorNo', '907697')
+        sewing      = request.form.get('sewing', 'Apparel Links')
+        printing    = request.form.get('printing', '')
+        washing     = request.form.get('washing', '')
+        presentation= request.form.get('presentation', 'Folded')
+        today       = request.form.get('today', datetime.date.today().isoformat())
 
         color_names = extras.get('color_names', {})
         fabrics     = extras.get('fabrics', [])
@@ -223,6 +226,9 @@ def build_excel():
         w(ws, ROW_FILE_NO, 3, file_no)
         w(ws, ROW_VENDOR,  3, vendor)
         w(ws, ROW_SEWING,  3, sewing)
+        w(ws, 5, 3, printing)
+        w(ws, 6, 3, washing)
+        w(ws, 7, 3, presentation)
         if pos:
             w(ws, ROW_SEASON, 3, pos[0].get('season', ''))
 
