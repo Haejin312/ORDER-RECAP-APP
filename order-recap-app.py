@@ -239,10 +239,17 @@ def build_excel():
         # ── Revision History (row 9+, AC/AE열) ────────
         for i, rev in enumerate(revision_history):
             row = ROW_REVISION_START + i
-            w(ws, row, COL_REV_DATE,  rev.get('date',''))
-            # notes 키 우선, 없으면 description 키 fallback
-            notes_val = rev.get('notes','') or rev.get('description','')
-            w(ws, row, COL_REV_NOTES, notes_val)
+            w(ws, row, COL_REV_DATE, rev.get('date',''))
+            # autoSummary(자동감지) + notes(수동입력) 합쳐서 기록
+            auto  = rev.get('autoSummary','')
+            notes = rev.get('notes','') or rev.get('description','')
+            if auto and notes:
+                combined = f"[자동] {auto} / [메모] {notes}"
+            elif auto:
+                combined = f"[자동] {auto}"
+            else:
+                combined = notes
+            w(ws, row, COL_REV_NOTES, combined)
 
         # ── Fabric Combination (row 11~14) ─────────────
         for i, fc in enumerate(fabric_combos[:4]):
