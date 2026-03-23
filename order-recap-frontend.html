@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Order Recap App</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#f0f2f5;color:#1a1a2e;min-height:100vh;}
+
+/* ── Header ── */
+.header{background:#1a1a2e;color:#fff;padding:14px 24px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:100;}
+.header h1{font-size:17px;font-weight:700;letter-spacing:1.5px;}
+.btn-settings{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);padding:6px 14px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;}
+
+/* ── Container ── */
+.container{max-width:880px;margin:0 auto;padding:24px 16px;}
+
+/* ── Card ── */
+.card{background:#fff;border-radius:12px;padding:22px;margin-bottom:18px;box-shadow:0 2px 8px rgba(0,0,0,.07);}
+.card-title{font-size:11px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;}
+
+/* ── Steps ── */
+.steps{display:flex;align-items:center;margin-bottom:22px;}
+.step{text-align:center;flex:1;}
+.step-num{width:28px;height:28px;border-radius:50%;background:#e0e0e0;color:#888;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;margin:0 auto 4px;}
+.step-num.active{background:#1a1a2e;color:#fff;}
+.step-num.done{background:#2d7d46;color:#fff;}
+.step-label{font-size:11px;color:#888;}
+.step-line{height:2px;background:#e0e0e0;flex:1;margin-bottom:14px;}
+
+/* ── Saved Recaps ── */
+.recap-item{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid #e8e8e8;border-radius:8px;margin-bottom:8px;background:#fafafa;}
+.recap-info .recap-title{font-size:13px;font-weight:700;}
+.recap-info .recap-meta{font-size:11px;color:#999;margin-top:2px;}
+.recap-actions{display:flex;gap:8px;flex-shrink:0;}
+.btn-update{background:#1a5c32;color:#fff;border:none;padding:6px 13px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600;}
+.btn-update:hover{background:#2d7d46;}
+.btn-delete{background:#dc3545;color:#fff;border:none;padding:6px 13px;border-radius:6px;cursor:pointer;font-size:12px;}
+
+/* ── Form ── */
+label{display:block;font-size:11px;font-weight:700;color:#666;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px;}
+input[type=text],select,textarea{width:100%;border:1px solid #ddd;border-radius:6px;padding:8px 11px;font-size:13px;color:#1a1a2e;background:#fff;font-family:inherit;}
+input:focus,select:focus,textarea:focus{outline:none;border-color:#1a1a2e;}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+.form-row{margin-bottom:14px;}
+
+/* ── Buttons ── */
+.btn-primary{background:#1a1a2e;color:#fff;border:none;padding:12px 28px;border-radius:8px;cursor:pointer;font-size:14px;font-weight:700;width:100%;}
+.btn-primary:hover{background:#2c2c4a;}
+.btn-secondary{background:#f0f2f5;color:#1a1a2e;border:1px solid #ddd;padding:10px 22px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;}
+.btn-back{background:none;color:#888;border:none;cursor:pointer;font-size:13px;padding:6px 0;display:flex;align-items:center;gap:5px;margin-bottom:14px;}
+.btn-back:hover{color:#1a1a2e;}
+
+/* ── Upload Zone ── */
+.upload-zone{border:2px dashed #ccc;border-radius:8px;padding:28px;text-align:center;cursor:pointer;transition:.2s;}
+.upload-zone:hover{border-color:#1a1a2e;background:#f8f8ff;}
+.upload-zone.has-files{border-color:#2d7d46;background:#f0fff4;border-style:solid;}
+.upload-zone-text{font-size:13px;color:#aaa;}
+.file-list{list-style:none;margin-top:10px;text-align:left;}
+.file-list li{font-size:12px;color:#333;padding:2px 0;display:flex;align-items:center;gap:6px;}
+.file-list li::before{content:"✓";color:#2d7d46;font-weight:700;}
+
+/* ── Existing POs box (update mode) ── */
+.existing-po-box{background:#f0f8ff;border:1px solid #b3d4ff;border-radius:8px;padding:12px 14px;margin-bottom:12px;}
+.existing-po-box p{font-size:12px;color:#444;margin-bottom:6px;font-weight:600;}
+.po-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.po-chip{background:#fff;border:1px solid #b3d4ff;border-radius:4px;padding:2px 8px;font-size:12px;color:#1a1a2e;}
+
+/* ── Color Names ── */
+.color-row{margin-bottom:10px;}
+.color-row label{font-size:12px;font-weight:600;color:#444;margin-bottom:4px;}
+.color-row input{font-size:13px;}
+
+/* ── Sketch ── */
+.sketch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;}
+.sketch-card{border:1px solid #ddd;border-radius:8px;padding:12px;text-align:center;}
+.sketch-card label{font-size:12px;font-weight:700;color:#1a1a2e;margin-bottom:8px;}
+.sketch-preview{width:100%;height:110px;object-fit:contain;border-radius:4px;display:none;margin-bottom:6px;}
+.sketch-btn{background:#f0f2f5;border:1px dashed #ccc;border-radius:6px;padding:18px 10px;cursor:pointer;width:100%;font-size:12px;color:#888;text-align:center;}
+.sketch-btn:hover{background:#e8e8e8;}
+.sketch-clear{font-size:11px;color:#dc3545;cursor:pointer;margin-top:4px;display:none;}
+
+/* ── Fabric Table ── */
+.fabric-table{width:100%;border-collapse:collapse;font-size:12px;}
+.fabric-table th{background:#1a1a2e;color:#fff;padding:8px 10px;text-align:left;font-size:11px;text-transform:uppercase;}
+.fabric-table td{padding:5px 7px;border:1px solid #e8e8e8;}
+.fabric-table tr:nth-child(even) td{background:#f9f9f9;}
+.fabric-table input{border:none;background:transparent;width:100%;font-size:12px;padding:2px 3px;color:#1a1a2e;}
+.fabric-table input:focus{background:#fff9e6;outline:none;border-bottom:1px solid #f0c040;}
+.auto-cell{background:#e8f4fd !important;color:#555;}
+.edit-cell{background:#f0fff4 !important;}
+.btn-add-row{background:#f0f2f5;border:1px dashed #ccc;border-radius:6px;padding:7px;width:100%;cursor:pointer;font-size:12px;color:#666;margin-top:8px;}
+
+/* ── Revision History Section ── */
+.revision-box{background:#fff8e1;border:1px solid #ffd740;border-radius:8px;padding:16px;margin-top:18px;}
+.revision-box-title{font-size:12px;font-weight:700;color:#5c3c00;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;}
+.revision-list{margin-bottom:14px;}
+.revision-entry{background:#fff;border:1px solid #ffe082;border-radius:6px;padding:10px 12px;margin-bottom:8px;font-size:12px;}
+.revision-entry-meta{color:#888;margin-bottom:4px;}
+.revision-entry-desc{color:#1a1a2e;font-weight:600;}
+.revision-new{background:#fffde7;border:1px dashed #ffd740;border-radius:8px;padding:12px;}
+.revision-new label{font-size:11px;font-weight:700;color:#5c3c00;margin-bottom:4px;}
+.revision-new textarea{font-size:12px;resize:vertical;min-height:60px;}
+
+/* ── Update Banner ── */
+.update-banner{background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#856404;display:flex;align-items:center;gap:8px;font-weight:600;}
+
+/* ── Loading / Success ── */
+.loading{text-align:center;padding:40px;}
+.spinner{width:38px;height:38px;border:3px solid #f0f0f0;border-top-color:#1a1a2e;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 14px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-text{font-size:13px;color:#888;}
+
+.success-card{text-align:center;padding:40px;}
+.success-icon{font-size:44px;margin-bottom:14px;}
+.success-title{font-size:19px;font-weight:700;margin-bottom:8px;}
+.success-sub{font-size:13px;color:#888;margin-bottom:22px;}
+.success-actions{display:flex;gap:10px;justify-content:center;}
+
+/* ── Settings Modal ── */
+.modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);display:none;z-index:200;justify-content:center;align-items:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:#fff;border-radius:12px;padding:26px;width:420px;max-width:95vw;}
+.modal h2{font-size:16px;font-weight:700;margin-bottom:18px;}
+.modal-actions{display:flex;gap:10px;margin-top:18px;}
+
+/* ── Misc ── */
+.hidden{display:none;}
+.mt8{margin-top:8px;}
+.mt14{margin-top:14px;}
+.mt18{margin-top:18px;}
+.flex-between{display:flex;justify-content:space-between;align-items:center;}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <h1>🧥 ORDER RECAP</h1>
+  <button class="btn-settings" onclick="openSettings()">⚙ Settings</button>
+</div>
+
+<!-- Settings Modal -->
+<div class="modal-overlay" id="settingsModal">
+  <div class="modal">
+    <h2>Settings</h2>
+    <div class="form-row">
+      <label>API Key</label>
+      <input type="text" id="apiKey" placeholder="sk-ant-..." />
+    </div>
+    <div class="form-row">
+      <label>Backend URL</label>
+      <input type="text" id="backendUrl" placeholder="https://order-recap-app.onrender.com" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn-primary" style="padding:10px 0;" onclick="saveSettings()">저장</button>
+      <button class="btn-secondary" onclick="testConnection()">연결 테스트</button>
+      <button class="btn-secondary" onclick="closeSettings()">닫기</button>
+    </div>
+    <p id="connStatus" style="font-size:12px;color:#888;margin-top:10px;"></p>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="container" id="mainContainer"></div>
+
+<script>
+// ═══════════════════════════════════════════════════
+// State
+// ═══════════════════════════════════════════════════
+let cfg = {
+  apiKey: localStorage.getItem('ora_apiKey') || '',
+  backendUrl: localStorage.getItem('ora_backendUrl') || ''
+};
+
+let st = {
+  step: 0,            // 0=home, 1=step1, 2=step2, 3=done
+  isUpdate: false,
+  editingFile: null,
+
+  fileNumber: '',
+  sewing: '',
+  printing: '',
+  washing: '',
+  presentation: '',
+
+  parsedPOs: [],
+  keepExistingPOs: true,
+
+  colorNames: {},     // {code: name}
+  fabricCombos: [],   // [{combo,bodyCode,bodyDesc,trimCode,trimDesc}]
+  sketches: {},       // {style: dataURL}
+
+  revisionDesc: '',   // new revision description (update mode)
+};
+
+let savedRecaps = JSON.parse(localStorage.getItem('ora_saved') || '{}');
+
+
+// ═══════════════════════════════════════════════════
+// Settings
+// ═══════════════════════════════════════════════════
+function openSettings() {
+  document.getElementById('apiKey').value = cfg.apiKey;
+  document.getElementById('backendUrl').value = cfg.backendUrl;
+  document.getElementById('settingsModal').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('settingsModal').classList.remove('open');
+}
+function saveSettings() {
+  cfg.apiKey = document.getElementById('apiKey').value.trim();
+  cfg.backendUrl = document.getElementById('backendUrl').value.trim().replace(/\/$/, '');
+  localStorage.setItem('ora_apiKey', cfg.apiKey);
+  localStorage.setItem('ora_backendUrl', cfg.backendUrl);
+  document.getElementById('connStatus').textContent = '✅ 저장됨';
+  setTimeout(closeSettings, 800);
+}
+async function testConnection() {
+  const url = document.getElementById('backendUrl').value.trim().replace(/\/$/, '');
+  document.getElementById('connStatus').textContent = '연결 중...';
+  try {
+    const r = await fetch(url + '/health');
+    const d = await r.json();
+    document.getElementById('connStatus').textContent =
+      d.template ? '✅ 서버 연결 성공 (템플릿: 있음)' : '⚠️ 서버 연결됨 (템플릿 없음)';
+  } catch (e) {
+    document.getElementById('connStatus').textContent = '❌ 연결 실패: ' + e.message;
+  }
+}
+
+
+// ═══════════════════════════════════════════════════
+// Render router
+// ═══════════════════════════════════════════════════
+function render() {
+  const c = document.getElementById('mainContainer');
+  if (st.step === 0) c.innerHTML = renderHome();
+  else if (st.step === 1) c.innerHTML = renderStep1();
+  else if (st.step === 2) c.innerHTML = renderStep2();
+  else if (st.step === 3) c.innerHTML = renderStep3();
+  attachHandlers();
+}
+
+
+// ═══════════════════════════════════════════════════
+// HOME
+// ═══════════════════════════════════════════════════
+function renderHome() {
+  const keys = Object.keys(savedRecaps);
+  let listHtml = '';
+  if (keys.length === 0) {
+    listHtml = '<p style="font-size:13px;color:#aaa;text-align:center;padding:16px 0;">저장된 Order Recap이 없습니다</p>';
+  } else {
+    keys.forEach(fn => {
+      const s = savedRecaps[fn];
+      const revCount = (s.revisions || []).length;
+      const lastRev = revCount > 0 ? s.revisions[revCount-1].date : '최초 생성';
+      const styles = [...new Set((s.pos||[]).map(p=>p.style).filter(Boolean))].join(', ');
+      listHtml += `
+        <div class="recap-item">
+          <div class="recap-info">
+            <div class="recap-title">${fn}</div>
+            <div class="recap-meta">${styles || ''} &nbsp;|&nbsp; ${lastRev}${revCount>0?' (Rev '+revCount+')':''}</div>
+          </div>
+          <div class="recap-actions">
+            <button class="btn-update" onclick="startUpdate('${fn}')">업데이트</button>
+            <button class="btn-delete" onclick="deleteRecap('${fn}')">삭제</button>
+          </div>
+        </div>`;
+    });
+  }
+  return `
+    <div class="card">
+      <div class="card-title">저장된 Order Recap</div>
+      ${listHtml}
+    </div>
+    <button class="btn-primary" onclick="startNew()">+ 새 Order Recap 만들기</button>`;
+}
+
+
+// ═══════════════════════════════════════════════════
+// STEP 1 – PO Upload
+// ═══════════════════════════════════════════════════
+function renderStep1() {
+  const existingBox = st.isUpdate && savedRecaps[st.editingFile] ? (() => {
+    const existing = savedRecaps[st.editingFile];
+    const poNums = (existing.pos || []).map(p => p.po_number).filter(Boolean);
+    const chips = poNums.map(n => `<span class="po-chip">${n}</span>`).join('');
+    return `
+      <div class="existing-po-box">
+        <p>📋 기존 PO (유지됨)</p>
+        <div class="po-chips">${chips || '없음'}</div>
+      </div>
+      <div class="form-row" style="margin-bottom:10px;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;text-transform:none;font-weight:600;">
+          <input type="checkbox" id="keepPOs" ${st.keepExistingPOs?'checked':''} onchange="st.keepExistingPOs=this.checked">
+          기존 PO 유지 (새로 업로드한 PO만 추가/교체)
+        </label>
+      </div>`;
+  })() : '';
+
+  return `
+    ${renderStepIndicator(1)}
+    ${st.isUpdate ? `<div class="update-banner">⚡ 업데이트 모드 — ${st.editingFile}</div>` : ''}
+    <button class="btn-back" onclick="goHome()">← 홈으로</button>
+
+    <div class="card">
+      <div class="card-title">기본 정보</div>
+      <div class="grid2" style="margin-bottom:14px;">
+        <div>
+          <label>File #</label>
+          <input type="text" id="fileNumber" value="${st.fileNumber}" placeholder="예: AL-2026-001" ${st.isUpdate?'readonly':''}>
+        </div>
+        <div></div>
+      </div>
+      <div class="grid4">
+        <div>
+          <label>Sewing</label>
+          <select id="sewing">
+            ${['INT, S.A.','JS INTERNATIONAL, S.A.','APPAREL LINKS, S.A.','TRINIDAD, S.A.','직접입력'].map(v=>`<option ${st.sewing===v?'selected':''}>${v}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label>Printing</label>
+          <select id="printing">
+            ${['N/A','PEOPLE AND ART','ART WELL','직접입력'].map(v=>`<option ${st.printing===v?'selected':''}>${v}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label>Washing</label>
+          <select id="washing">
+            ${['N/A','KIMS','직접입력'].map(v=>`<option ${st.washing===v?'selected':''}>${v}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label>Presentation</label>
+          <select id="presentation">
+            ${['FOLDED','HANGING','직접입력'].map(v=>`<option ${st.presentation===v?'selected':''}>${v}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">PO PDF 업로드</div>
+      ${existingBox}
+      <div class="upload-zone" id="poZone" onclick="document.getElementById('poInput').click()">
+        <div class="upload-zone-text">클릭하거나 드래그해서 PO PDF 업로드</div>
+        <ul class="file-list" id="poFileList"></ul>
+      </div>
+      <input type="file" id="poInput" multiple accept=".pdf" style="display:none" onchange="onPOFilesSelected(this.files)">
+    </div>
+
+    <button class="btn-primary" onclick="submitStep1()">
+      ${st.isUpdate ? '분석 후 Step 2로 →' : 'PO 분석 시작 →'}
+    </button>`;
+}
+
+
+// ═══════════════════════════════════════════════════
+// STEP 2 – Color / Sketch / Fabric
+// ═══════════════════════════════════════════════════
+function renderStep2() {
+  const colorCodes = getUniqueColorCodes();
+  const styles     = getUniqueStyles();
+
+  // Color Name inputs
+  let colorHtml = '';
+  colorCodes.forEach(code => {
+    colorHtml += `
+      <div class="color-row">
+        <label>${code}</label>
+        <input type="text" id="cn_${code}" value="${st.colorNames[code]||''}" placeholder="Color Name 입력">
+      </div>`;
+  });
+
+  // Sketch
+  let sketchHtml = '';
+  styles.forEach(style => {
+    const previewSrc = st.sketches[style] || '';
+    sketchHtml += `
+      <div class="sketch-card">
+        <label>${style}</label>
+        <img class="sketch-preview" id="prev_${style}" src="${previewSrc}" style="${previewSrc?'display:block;':''}">
+        <div class="sketch-btn" onclick="document.getElementById('sk_${style}').click()">
+          ${previewSrc ? '🔄 교체' : '📎 업로드'}
+        </div>
+        <input type="file" id="sk_${style}" accept="image/*" style="display:none" onchange="onSketchSelected(this,'${style}')">
+        <div class="sketch-clear" id="skc_${style}" style="${previewSrc?'display:block;':''}" onclick="clearSketch('${style}')">✕ 삭제</div>
+      </div>`;
+  });
+
+  // Fabric Combo rows
+  if (st.fabricCombos.length === 0) buildDefaultFabricCombos();
+  let fabricHtml = '';
+  st.fabricCombos.forEach((fc, i) => {
+    fabricHtml += `
+      <tr>
+        <td style="font-weight:700;color:#1a1a2e;">${fc.combo}</td>
+        <td class="edit-cell"><input id="fc_bc_${i}" value="${fc.bodyCode||''}" placeholder="코드"></td>
+        <td class="edit-cell"><input id="fc_bd_${i}" value="${fc.bodyDesc||''}" placeholder="원단 설명 (수정 가능)"></td>
+        <td class="edit-cell"><input id="fc_tc_${i}" value="${fc.trimCode||''}" placeholder="코드"></td>
+        <td class="edit-cell"><input id="fc_td_${i}" value="${fc.trimDesc||''}" placeholder="설명"></td>
+      </tr>`;
+  });
+
+  // Revision History section (update mode only)
+  let revisionHtml = '';
+  if (st.isUpdate) {
+    const existing = savedRecaps[st.editingFile];
+    const pastRevs = (existing && existing.revisions) ? existing.revisions : [];
+    let pastHtml = '';
+    if (pastRevs.length > 0) {
+      pastHtml = `<div class="revision-list">`;
+      pastRevs.forEach(r => {
+        pastHtml += `
+          <div class="revision-entry">
+            <div class="revision-entry-meta">${r.date}${r.pos_numbers?' &nbsp;|&nbsp; PO: '+r.pos_numbers:''}</div>
+            <div class="revision-entry-desc">${r.description||'(내용 없음)'}</div>
+          </div>`;
+      });
+      pastHtml += `</div>`;
+    }
+    // Auto PO numbers from newly uploaded POs
+    const newPONums = st.parsedPOs.map(p=>p.po_number).filter(Boolean).join(', ');
+    revisionHtml = `
+      <div class="revision-box">
+        <div class="revision-box-title">📋 Revision History</div>
+        ${pastHtml}
+        <div class="revision-new">
+          <label>새 Revision 내용 입력</label>
+          <div style="font-size:11px;color:#888;margin-bottom:6px;">날짜: ${today()} &nbsp;|&nbsp; 변경된 PO: ${newPONums||'(없음)'}</div>
+          <textarea id="revDesc" placeholder="변경 내용을 입력하세요 (예: PO 3510049652 수량 변경)">${st.revisionDesc||''}</textarea>
+        </div>
+      </div>`;
+  }
+
+  return `
+    ${renderStepIndicator(2)}
+    ${st.isUpdate ? `<div class="update-banner">⚡ 업데이트 모드 — ${st.editingFile}</div>` : ''}
+    <button class="btn-back" onclick="goStep1()">← Step 1으로</button>
+
+    <div class="card">
+      <div class="card-title">Color Name 입력</div>
+      ${colorHtml || '<p style="font-size:13px;color:#aaa;">PO에서 Color Code를 불러오지 못했습니다</p>'}
+    </div>
+
+    <div class="card">
+      <div class="card-title">스케치 업로드</div>
+      <div class="sketch-grid">${sketchHtml||'<p style="font-size:13px;color:#aaa;">Style 정보 없음</p>'}</div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Fabric Combination</div>
+      <div style="overflow-x:auto;">
+        <table class="fabric-table">
+          <thead>
+            <tr>
+              <th>COMBO</th>
+              <th>BODY CODE</th>
+              <th>BODY DESC</th>
+              <th>TRIM CODE</th>
+              <th>TRIM DESC</th>
+            </tr>
+          </thead>
+          <tbody id="fabricBody">${fabricHtml}</tbody>
+        </table>
+      </div>
+      <button class="btn-add-row" onclick="addFabricRow()">+ 행 추가</button>
+    </div>
+
+    ${revisionHtml}
+
+    <button class="btn-primary" onclick="submitStep2()">
+      ${st.isUpdate ? '최종 업데이트 Excel 생성 →' : '최종 Excel 생성 →'}
+    </button>`;
+}
+
+
+// ═══════════════════════════════════════════════════
+// STEP 3 – Done
+// ═══════════════════════════════════════════════════
+function renderStep3() {
+  return `
+    <div class="card success-card">
+      <div class="success-icon">✅</div>
+      <div class="success-title">Order Recap ${st.isUpdate ? '업데이트' : '생성'} 완료!</div>
+      <div class="success-sub">${st.fileNumber} — 자동 저장됨</div>
+      <div class="success-actions">
+        <button class="btn-secondary" onclick="goStep2()">← Step 2 수정</button>
+        <button class="btn-primary" style="width:auto;padding:10px 24px;" onclick="goHome()">홈으로</button>
+      </div>
+    </div>`;
+}
+
+
+// ═══════════════════════════════════════════════════
+// Step Indicator
+// ═══════════════════════════════════════════════════
+function renderStepIndicator(active) {
+  const steps = ['PO 업로드','정보 입력','완료'];
+  let html = '<div class="steps">';
+  steps.forEach((label, i) => {
+    const n = i + 1;
+    const cls = n < active ? 'done' : n === active ? 'active' : '';
+    html += `<div class="step"><div class="step-num ${cls}">${n < active ? '✓' : n}</div><div class="step-label">${label}</div></div>`;
+    if (i < steps.length - 1) html += '<div class="step-line"></div>';
+  });
+  return html + '</div>';
+}
+
+
+// ═══════════════════════════════════════════════════
+// Navigation
+// ═══════════════════════════════════════════════════
+function goHome() {
+  st = {step:0,isUpdate:false,editingFile:null,fileNumber:'',sewing:'INT, S.A.',printing:'N/A',washing:'N/A',presentation:'FOLDED',parsedPOs:[],keepExistingPOs:true,colorNames:{},fabricCombos:[],sketches:{},revisionDesc:''};
+  render();
+}
+function goStep1() { st.step = 1; render(); }
+function goStep2() { st.step = 2; render(); }
+
+function startNew() {
+  st.isUpdate = false;
+  st.editingFile = null;
+  st.fileNumber = '';
+  st.sewing = 'INT, S.A.';
+  st.printing = 'N/A';
+  st.washing = 'N/A';
+  st.presentation = 'FOLDED';
+  st.parsedPOs = [];
+  st.colorNames = {};
+  st.fabricCombos = [];
+  st.sketches = {};
+  st.revisionDesc = '';
+  st.step = 1;
+  render();
+}
+
+function startUpdate(fileNum) {
+  const saved = savedRecaps[fileNum];
+  st.isUpdate    = true;
+  st.editingFile = fileNum;
+  st.fileNumber  = fileNum;
+  st.sewing      = saved.sewing      || 'INT, S.A.';
+  st.printing    = saved.printing    || 'N/A';
+  st.washing     = saved.washing     || 'N/A';
+  st.presentation= saved.presentation|| 'FOLDED';
+  st.parsedPOs   = [];              // 새 PO는 Step1에서 추가
+  st.keepExistingPOs = true;
+  st.colorNames  = JSON.parse(JSON.stringify(saved.colorNames  || {}));
+  st.fabricCombos= JSON.parse(JSON.stringify(saved.fabricCombos|| []));
+  st.sketches    = JSON.parse(JSON.stringify(saved.sketches    || {}));
+  st.revisionDesc= '';
+  st.step = 1;
+  render();
+}
+
+function deleteRecap(fileNum) {
+  if (!confirm(`"${fileNum}" Order Recap을 삭제할까요?`)) return;
+  delete savedRecaps[fileNum];
+  localStorage.setItem('ora_saved', JSON.stringify(savedRecaps));
+  render();
+}
+
+
+// ═══════════════════════════════════════════════════
+// Step 1 logic
+// ═══════════════════════════════════════════════════
+let newPOFiles = [];
+
+function attachHandlers() {
+  // Drag & drop
+  const zone = document.getElementById('poZone');
+  if (!zone) return;
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.style.background='#f0f0ff'; });
+  zone.addEventListener('dragleave', () => { zone.style.background=''; });
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.style.background='';
+    onPOFilesSelected(e.dataTransfer.files);
+  });
+}
+
+function onPOFilesSelected(files) {
+  newPOFiles = Array.from(files);
+  const zone = document.getElementById('poZone');
+  const list = document.getElementById('poFileList');
+  if (!zone || !list) return;
+  zone.classList.toggle('has-files', newPOFiles.length > 0);
+  list.innerHTML = newPOFiles.map(f => `<li>${f.name}</li>`).join('');
+}
+
+async function submitStep1() {
+  // Read form values
+  st.fileNumber   = document.getElementById('fileNumber')?.value.trim() || st.fileNumber;
+  st.sewing       = document.getElementById('sewing')?.value       || st.sewing;
+  st.printing     = document.getElementById('printing')?.value     || st.printing;
+  st.washing      = document.getElementById('washing')?.value      || st.washing;
+  st.presentation = document.getElementById('presentation')?.value || st.presentation;
+
+  if (!st.fileNumber) { alert('File # 을 입력해주세요'); return; }
+  if (newPOFiles.length === 0 && !st.isUpdate) { alert('PO PDF 파일을 업로드해주세요'); return; }
+  if (newPOFiles.length === 0 && st.isUpdate) {
+    // Update mode, no new POs → go straight to Step 2 with existing data
+    if (st.keepExistingPOs && savedRecaps[st.editingFile]) {
+      const existing = savedRecaps[st.editingFile];
+      // Keep existing POs, build Step2
+      const merged = [...(existing.pos || [])];
+      st.parsedPOs = merged;
+      buildDefaultFabricCombos();
+      st.step = 2;
+      render();
+    } else {
+      alert('새 PO 파일을 업로드하거나 기존 PO 유지를 선택해주세요');
+    }
+    return;
+  }
+
+  // Parse POs
+  showLoading('PO 분석 중...');
+  const fd = new FormData();
+  newPOFiles.forEach(f => fd.append('files', f));
+
+  try {
+    const r = await fetch(cfg.backendUrl + '/parse-po', {
+      method: 'POST',
+      headers: {'X-API-Key': cfg.apiKey},
+      body: fd
+    });
+    const d = await r.json();
+    let newPOs = d.pos || [];
+    newPOs = newPOs.filter(p => !p.error);
+
+    if (st.isUpdate && st.keepExistingPOs && savedRecaps[st.editingFile]) {
+      const existing = savedRecaps[st.editingFile];
+      const existingPos = (existing.pos || []).filter(ep =>
+        !newPOs.find(np => np.po_number === ep.po_number)
+      );
+      st.parsedPOs = [...existingPos, ...newPOs];
+    } else {
+      st.parsedPOs = newPOs;
+    }
+
+    if (st.parsedPOs.length === 0) {
+      alert('PO 파싱에 실패했습니다. 로그를 확인해주세요.');
+      st.step = 1; render(); return;
+    }
+
+    buildDefaultFabricCombos();
+    st.step = 2;
+    render();
+  } catch (e) {
+    alert('오류: ' + e.message);
+    st.step = 1; render();
+  }
+}
+
+function showLoading(msg) {
+  document.getElementById('mainContainer').innerHTML = `
+    <div class="card loading">
+      <div class="spinner"></div>
+      <div class="loading-text">${msg}</div>
+    </div>`;
+}
+
+
+// ═══════════════════════════════════════════════════
+// Step 2 logic
+// ═══════════════════════════════════════════════════
+function getUniqueColorCodes() {
+  const seen = new Set();
+  return st.parsedPOs.map(p => p.color_code).filter(c => c && !seen.has(c) && seen.add(c));
+}
+
+function getUniqueStyles() {
+  const seen = new Set();
+  return st.parsedPOs.map(p => p.style).filter(s => s && !seen.has(s) && seen.add(s));
+}
+
+function normalizeBodyDesc(desc) {
+  if (!desc) return 'UNKNOWN';
+  const d = desc.toUpperCase();
+  if (d.includes('60') && (d.includes('COTT') || d.includes('POLY'))) return '60/40 COTTON/POLY';
+  if (d.includes('90') && (d.includes('COTT') || d.includes('POLY'))) return '90/10 COTTON/POLY';
+  if (d.includes('100') && d.includes('POLY') && !d.includes('COTT')) return '100% POLYESTER';
+  if (d.includes('100') || (d.includes('COTT') && !d.includes('POLY'))) return '100% COTTON';
+  return d.trim();
+}
+
+function buildDefaultFabricCombos() {
+  const seen = new Map(); // normalized -> {combo, bodyDesc}
+  let cIdx = 1;
+  st.parsedPOs.forEach(po => {
+    const norm = normalizeBodyDesc(po.fabric_desc);
+    if (norm && norm !== 'UNKNOWN' && !seen.has(norm)) {
+      seen.set(norm, {combo: 'C' + cIdx++, bodyDesc: po.fabric_desc || norm});
+    }
+  });
+  // Merge with existing combos (preserve user edits)
+  const existing = st.fabricCombos;
+  const newCombos = [];
+  seen.forEach((val, norm) => {
+    const ex = existing.find(fc => normalizeBodyDesc(fc.bodyDesc) === norm);
+    newCombos.push(ex ? ex : {combo: val.combo, bodyCode:'', bodyDesc: val.bodyDesc, trimCode:'', trimDesc:''});
+  });
+  // Renumber
+  newCombos.forEach((fc, i) => { fc.combo = 'C' + (i+1); });
+  st.fabricCombos = newCombos;
+}
+
+function addFabricRow() {
+  collectFabricCombos();
+  const next = 'C' + (st.fabricCombos.length + 1);
+  st.fabricCombos.push({combo: next, bodyCode:'', bodyDesc:'', trimCode:'', trimDesc:''});
+  st.step = 2; render();
+}
+
+function onSketchSelected(input, style) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    st.sketches[style] = e.target.result;
+    const prev = document.getElementById('prev_' + style);
+    const clr  = document.getElementById('skc_' + style);
+    if (prev) { prev.src = e.target.result; prev.style.display = 'block'; }
+    if (clr)  { clr.style.display = 'block'; }
+    const btn = input.previousElementSibling;
+    if (btn) btn.textContent = '🔄 교체';
+  };
+  reader.readAsDataURL(file);
+}
+
+function clearSketch(style) {
+  st.sketches[style] = '';
+  const prev = document.getElementById('prev_' + style);
+  const clr  = document.getElementById('skc_' + style);
+  if (prev) { prev.src=''; prev.style.display='none'; }
+  if (clr)  { clr.style.display = 'none'; }
+}
+
+function collectStep2Data() {
+  // Color names
+  getUniqueColorCodes().forEach(code => {
+    const el = document.getElementById('cn_' + code);
+    if (el) st.colorNames[code] = el.value.trim();
+  });
+  // Fabric combos
+  collectFabricCombos();
+  // Revision desc
+  const rd = document.getElementById('revDesc');
+  if (rd) st.revisionDesc = rd.value.trim();
+}
+
+function collectFabricCombos() {
+  st.fabricCombos.forEach((fc, i) => {
+    ['bc','bd','tc','td'].forEach((key, ki) => {
+      const field = ['bodyCode','bodyDesc','trimCode','trimDesc'][ki];
+      const el = document.getElementById(`fc_${key}_${i}`);
+      if (el) fc[field] = el.value.trim();
+    });
+  });
+}
+
+async function submitStep2() {
+  collectStep2Data();
+
+  // Build revision history
+  let revisions = [];
+  if (st.isUpdate && savedRecaps[st.editingFile]) {
+    revisions = JSON.parse(JSON.stringify(savedRecaps[st.editingFile].revisions || []));
+  }
+  if (st.isUpdate) {
+    const newPONums = st.parsedPOs
+      .filter(p => !savedRecaps[st.editingFile]?.pos?.find(ep => ep.po_number === p.po_number))
+      .map(p => p.po_number).filter(Boolean).join(', ');
+    revisions.push({
+      date: today(),
+      pos_numbers: newPONums,
+      description: st.revisionDesc || ''
+    });
+  }
+
+  showLoading('Excel 생성 중...');
+
+  // Sketches: strip large data if needed, only include non-empty
+  const sketchPayload = {};
+  Object.entries(st.sketches).forEach(([style, data]) => {
+    if (data) sketchPayload[style] = data;
+  });
+
+  const payload = {
+    file_number: st.fileNumber,
+    pos: st.parsedPOs,
+    color_names: st.colorNames,
+    fabric_combos: st.fabricCombos,
+    sketches: sketchPayload,
+    sewing: st.sewing,
+    printing: st.printing,
+    washing: st.washing,
+    presentation: st.presentation,
+    revision_history: revisions
+  };
+
+  try {
+    const r = await fetch(cfg.backendUrl + '/build-excel', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-API-Key':cfg.apiKey},
+      body: JSON.stringify(payload)
+    });
+    if (!r.ok) {
+      const err = await r.json();
+      alert('오류: ' + (err.error || r.status));
+      st.step = 2; render(); return;
+    }
+    const blob = await r.blob();
+    const dateStr = todayCompact();
+    const fname = `${st.fileNumber}_Order Recap_Team#4_${dateStr}.xlsx`;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fname; a.click();
+    URL.revokeObjectURL(url);
+
+    // Save
+    savedRecaps[st.fileNumber] = {
+      pos: st.parsedPOs,
+      colorNames: st.colorNames,
+      fabricCombos: st.fabricCombos,
+      sketches: {},     // don't store large images in localStorage
+      sewing: st.sewing,
+      printing: st.printing,
+      washing: st.washing,
+      presentation: st.presentation,
+      revisions: revisions
+    };
+    localStorage.setItem('ora_saved', JSON.stringify(savedRecaps));
+
+    st.step = 3; render();
+  } catch (e) {
+    alert('오류: ' + e.message);
+    st.step = 2; render();
+  }
+}
+
+
+// ═══════════════════════════════════════════════════
+// Utils
+// ═══════════════════════════════════════════════════
+function today() {
+  const d = new Date();
+  return d.toISOString().slice(0,10);
+}
+function todayCompact() {
+  return today().replace(/-/g,'');
+}
+
+
+// ═══════════════════════════════════════════════════
+// Init
+// ═══════════════════════════════════════════════════
+render();
+</script>
+</body>
+</html>
