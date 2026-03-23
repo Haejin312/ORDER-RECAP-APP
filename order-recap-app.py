@@ -1,331 +1,313 @@
-import os, io, json, base64, datetime, re, time
-from flask import Flask, request, jsonify
+import os, io, json, base64, datetime, re, time, traceback
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 import anthropic
 from openpyxl import load_workbook
 from openpyxl.cell import MergedCell
 from openpyxl.drawing.image import Image as XLImage
 from openpyxl.utils import get_column_letter
-from PIL import Image as PILImage
-import fitz
 
 app = Flask(__name__)
 CORS(app)
 
-TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), 'Carhartt order recap 양식.xlsx')
+TEMPLATE_PATH = 'Carhartt order recap 양식.xlsx'
 
-ROW_FILE_NO   = 1
-ROW_SEASON    = 2
-ROW_VENDOR    = 3
-ROW_SEWING    = 4
-ROW_C = {'C1': 11, 'C2': 12, 'C3': 13, 'C4': 14}
-ROW_PO       = 17
-ROW_UNIT     = 18
-ROW_EX       = 19
-ROW_DLV      = 20
-ROW_STYLE    = 21
-ROW_COLOR_CD = 22
-ROW_COLOR    = 23
-ROW_FABRIC   = 24
-ROW_SHIP     = 25
-ROW_MODE     = 26
+# ── Row / Column constants ─────────────────────────────────────
+ROW_SEWING           = 4
+ROW_PRINTING         = 5
+ROW_WASHING          = 6
+ROW_PRESENTATION     = 7
+
+ROW_REVISION_START   = 9
+COL_REVISION_DATE    = 29   # AC
+COL_REVISION_POS     = 30   # AD
+COL_REVISION_DESC    = 31   # AE
+
+FABRIC_COMBO_START   = 13
+FABRIC_COL_COMBO     = 2
+FABRIC_COL_BCODE     = 4
+FABRIC_COL_BDESC     = 6
+FABRIC_COL_TCODE     = 10
+FABRIC_COL_TDESC     = 14
+
+SKETCH_ROW  = 3
+SKETCH_COLS = {0: 16, 1: 19, 2: 22, 3: 25}
+
+ROW_PO              = 17
+ROW_ORDER_UNIT      = 18
+ROW_EX_FACTORY      = 19
+ROW_DELIVERY        = 20
+ROW_STYLE           = 21
+ROW_COLOR_CODE      = 22
+ROW_COLOR_NAME      = 23
+ROW_FABRIC_LABEL    = 24
+ROW_SHIP_TO         = 25
+ROW_SHIP_MODE       = 26
+ROW_TOTAL           = 47
+ROW_FOB             = 48
+
 SIZE_ROWS = {
-    'XS': 30, 'S': 31, 'M': 32, 'L': 33, 'XL': 34, '2XL': 35,
-    '3XL': 36, '4XL': 37, '5XL': 38, '6XL': 39,
-    'LTLL': 40, 'XLTLL': 41, '2XLTLL': 42, '3XLTLL': 43, '4XLTLL': 44, '5XLTLL': 45
+    'XS':30,'S':31,'M':32,'L':33,'XL':34,
+    '2XL':35,'3XL':36,
+    'LT':37,'XLT':38,'2XLT':39,'3XLT':40,
+    'LTLL':41,'XLTLL':42,'2XLTLL':43,'3XLTLL':44,
+    '4XLTLL':45,'5XLTLL':46
 }
-ROW_REV_START = 9
-COL_REV_DATE  = 29
-COL_REV_NOTES = 30
 
-def pcs_col(i): return 3 + i * 2
-def fob_col(i): return 4 + i * 2
-def style_header_col(i): return 16 + i * 3
+PO_SLOT_COLS = [3 + i * 2 for i in range(11)]
 
-def get_template_ws():
-    wb = load_workbook(TEMPLATE_PATH)
-    return wb, wb.worksheets[0]
 
-def w(ws, row, col, val, fmt=None):
-    cell = ws.cell(row=row, column=col)
-    if isinstance(cell, MergedCell):
-        for mr in ws.merged_cells.ranges:
-            if mr.min_row <= row <= mr.max_row and mr.min_col <= col <= mr.max_col:
-                cell = ws.cell(row=mr.min_row, column=mr.min_col)
-                break
-        else:
-            return
-    cell.value = val
-    if fmt:
-        cell.number_format = fmt
-
+# ── Helpers ────────────────────────────────────────────────────
 def parse_date(s):
-    if not s: return None
-    try:
-        if '/' in str(s):
-            return datetime.datetime.strptime(str(s), '%m/%d/%Y').date()
-        return datetime.date.fromisoformat(str(s))
-    except:
+    if not s:
         return None
+    for fmt in ['%m/%d/%Y', '%Y-%m-%d', '%d/%m/%Y', '%m/%d/%y']:
+        try:
+            return datetime.datetime.strptime(str(s).strip(), fmt).date()
+        except Exception:
+            pass
+    return None
 
-def extract_pdf_text(pdf_bytes):
-    doc = fitz.open(stream=pdf_bytes, filetype='pdf')
-    text = ''.join(page.get_text() for page in doc)
-    doc.close()
-    return text[:6000]
 
-def normalize_fabric(desc):
-    """fabric_desc 정규화 - 같은 fiber content를 하나로 묶기"""
+def normalize_fiber(desc):
+    if not desc:
+        return 'UNKNOWN'
     d = desc.upper()
-    if re.search(r'60.?\s*COTTON.*40.?\s*POLY|60/40', d):
-        return "60% COTTON 40% POLYESTER KNIT"
-    if re.search(r'90.?\s*COTTON.*10.?\s*POLY|90/10', d):
-        return "90% COTTON 10% POLYESTER KNIT"
-    if re.search(r'100.?\s*COTTON', d):
-        return "100% COTTON KNIT"
-    if re.search(r'100.?\s*POLY', d):
-        return "100% POLYESTER KNIT"
-    return desc.strip()
+    if '60' in d and ('COTT' in d or 'POLY' in d):
+        return '60/40 COTTON/POLY'
+    if '90' in d and ('COTT' in d or 'POLY' in d):
+        return '90/10 COTTON/POLY'
+    if '100' in d and 'POLY' in d and 'COTT' not in d:
+        return '100% POLYESTER'
+    if '100' in d or ('COTT' in d and 'POLY' not in d):
+        return '100% COTTON'
+    return d.strip()
+
+
+def w(ws, row, col, value):
+    try:
+        cell = ws.cell(row=row, column=col)
+        if isinstance(cell, MergedCell):
+            for mr in ws.merged_cells.ranges:
+                if (mr.min_row <= row <= mr.max_row and
+                        mr.min_col <= col <= mr.max_col):
+                    ws.cell(row=mr.min_row, column=mr.min_col).value = value
+                    return
+        else:
+            cell.value = value
+    except Exception:
+        pass
+
+
+def get_client(req):
+    key = req.headers.get('X-API-Key', '')
+    return anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
+
+
+# ── Routes ─────────────────────────────────────────────────────
+@app.route('/health', methods=['GET'])
+def health():
+    return jsonify({'status': 'ok', 'template': os.path.exists(TEMPLATE_PATH)})
 
 
 @app.route('/parse-po', methods=['POST'])
 def parse_po():
-    api_key = request.headers.get('X-Api-Key')
-    if not api_key:
-        return jsonify({'error': 'API key required'}), 401
-
-    files = request.files.getlist('files')
+    client = get_client(request)
+    files  = request.files.getlist('files')
     results = []
-    client = anthropic.Anthropic(api_key=api_key)
 
     for f in files:
-        pdf_bytes = f.read()
-        pdf_text = extract_pdf_text(pdf_bytes)
-
-        msg = client.messages.create(
-            model='claude-sonnet-4-5',
-            max_tokens=2000,
-            messages=[{'role': 'user', 'content': [
-                {'type': 'text', 'text': f'''Extract ALL data from this Carhartt PO text. Return ONLY valid JSON:
-
-{{
-  "po_number": "3510042802",
-  "season": "F24",
-  "ex_factory_date": "04/28/2024",
-  "delivery_date": "05/23/2024",
-  "style": "K126",
-  "color_code": "HH5",
-  "ship_to": "Carhartt Inc",
-  "ship_mode": "S-Ocean",
-  "hts": "6105.10.0010",
-  "fabric_desc": "MENS SHIRT 60% COTTON 40% POLYESTER KNIT HENLEY",
-  "sizes": {{
-    "XS": {{"pcs": 4, "fob": 4.87}},
-    "S": {{"pcs": 32, "fob": 4.87}},
-    "M": {{"pcs": 277, "fob": 4.87}},
-    "L": {{"pcs": 373, "fob": 4.87}},
-    "XL": {{"pcs": 292, "fob": 4.87}},
-    "2XL": {{"pcs": 170, "fob": 4.87}},
-    "3XL": {{"pcs": 101, "fob": 5.75}},
-    "4XL": {{"pcs": 19, "fob": 5.75}},
-    "5XL": {{"pcs": 9, "fob": 5.75}},
-    "6XL": {{"pcs": 0, "fob": 0}},
-    "LTLL": {{"pcs": 14, "fob": 5.48}},
-    "XLTLL": {{"pcs": 15, "fob": 5.48}},
-    "2XLTLL": {{"pcs": 14, "fob": 5.48}},
-    "3XLTLL": {{"pcs": 6, "fob": 5.48}},
-    "4XLTLL": {{"pcs": 1, "fob": 5.48}},
-    "5XLTLL": {{"pcs": 0, "fob": 0}}
-  }},
-  "total_pcs": 1327
-}}
-
-Rules:
-- style: style number only (e.g. "K126", "K128", "K231")
-- color_code: color code only after last hyphen in SKU (K128-BLK->"BLK", K126-HH5->"HH5")
-- hts: HTS code from "HTS:XXXX" format (e.g. "6105.10.0010")
-- fabric_desc: Extract EXACTLY what comes after the pipe "|" in the HTS line.
-  Example: "HTS:6105.10.0010|MENS SHIRT 60% COTTON 40% POLYESTER KNIT HENLEY"
-  -> fabric_desc = "MENS SHIRT 60% COTTON 40% POLYESTER KNIT HENLEY"
-- XSREG->XS, MREG->M, 2XLREG->2XL (strip REG suffix)
-- LTLL->LTLL, 2XLTLL->2XLTLL (keep TLL suffix)
-- pcs=0, fob=0 for sizes not in PO
-- ship_to: first line only ("Carhartt DC5" or "Carhartt Inc")
-- ship_mode: "S-Ocean" for ocean, "Air" for air
-- Return ONLY the JSON
-
-PO TEXT:
-{pdf_text}'''}
-            ]}]
-        )
-
-        text = msg.content[0].text.strip()
-        clean = re.sub(r'```json|```', '', text).strip()
-        po = json.loads(clean)
+        raw  = f.read()
+        b64  = base64.b64encode(raw).decode()
+        try:
+            resp = client.messages.create(
+                model='claude-sonnet-4-5',
+                max_tokens=2000,
+                messages=[{
+                    'role': 'user',
+                    'content': [
+                        {
+                            'type': 'document',
+                            'source': {'type':'base64','media_type':'application/pdf','data':b64}
+                        },
+                        {
+                            'type': 'text',
+                            'text': (
+                                'Extract from this Carhartt PO and return ONLY valid JSON:\n'
+                                '{\n'
+                                '  "po_number": "",\n'
+                                '  "style": "",\n'
+                                '  "color_code": "",\n'
+                                '  "order_unit": "",\n'
+                                '  "ex_factory_date": "",\n'
+                                '  "delivery_date": "",\n'
+                                '  "fob_price": "",\n'
+                                '  "ship_to": "",\n'
+                                '  "ship_mode": "",\n'
+                                '  "fabric_desc": "",\n'
+                                '  "hts": "",\n'
+                                '  "sizes":{"XS":0,"S":0,"M":0,"L":0,"XL":0,'
+                                '"2XL":0,"3XL":0,"LT":0,"XLT":0,"2XLT":0,"3XLT":0,'
+                                '"LTLL":0,"XLTLL":0,"2XLTLL":0,"3XLTLL":0,"4XLTLL":0,"5XLTLL":0},\n'
+                                '  "total_qty": 0,\n'
+                                '  "total_amount": 0\n'
+                                '}\n'
+                                'Rules:\n'
+                                '- color_code: suffix after hyphen only '
+                                '(K128-BLK->"BLK", K231-NVY->"NVY"). Standalone codes as-is.\n'
+                                '- fabric_desc: fiber content from HTS line after | '
+                                '(e.g."100% COTTON KNIT","60% COTTON 40% POLY KNIT")\n'
+                                '- dates: MM/DD/YYYY format\n'
+                                '- Return ONLY JSON, no markdown'
+                            )
+                        }
+                    ]
+                }]
+            )
+            text = resp.content[0].text.strip()
+            text = re.sub(r'^```json\s*', '', text)
+            text = re.sub(r'```\s*$', '', text).strip()
+            po = json.loads(text)
+            po['filename'] = f.filename
+            results.append(po)
+        except Exception as e:
+            results.append({'error': str(e), 'filename': f.filename})
         time.sleep(3)
-        results.append(po)
 
-    # HTS + 정규화된 fiber content로 고유 Combo 생성
-    slot_key_map = {}
-    fabric_slots = []
-    combo_idx = 1
-
-    for po in results:
-        hts = po.get('hts', '')
-        raw_desc = po.get('fabric_desc', '')
-        norm_desc = normalize_fabric(raw_desc)
-        # fiber content만으로 구분 (HTS 무관)
-        key = norm_desc
-        if key not in slot_key_map:
-            combo = f'C{combo_idx}'
-            slot_key_map[key] = combo
-            fabric_slots.append({
-                'combo': combo,
-                'hts': hts,
-                'body_desc': norm_desc,
-                'body_code': '',
-                'trim_code': '',
-                'trim_desc': ''
-            })
-            combo_idx += 1
-        po['fabric_combo'] = slot_key_map[key]
-        po['fabric_desc'] = norm_desc
-
-    return jsonify({'pos': results, 'fabric_slots': fabric_slots})
+    return jsonify({'pos': results})
 
 
 @app.route('/build-excel', methods=['POST'])
 def build_excel():
-    if not os.path.exists(TEMPLATE_PATH):
-        return jsonify({'error': 'Template not found'}), 500
-
     try:
-        pos     = json.loads(request.form.get('pos', '[]'))
-        extras  = json.loads(request.form.get('extras', '{}'))
-        file_no     = request.form.get('fileNo', '')
-        vendor      = request.form.get('vendorNo', '907697')
-        sewing      = request.form.get('sewing', 'Apparel Links')
-        printing    = request.form.get('printing', '')
-        washing     = request.form.get('washing', '')
-        presentation= request.form.get('presentation', 'Folded')
-        today       = request.form.get('today', datetime.date.today().isoformat())
+        data             = request.json
+        file_number      = data.get('file_number', 'UNKNOWN')
+        pos              = data.get('pos', [])
+        color_names      = data.get('color_names', {})
+        fabric_combos    = data.get('fabric_combos', [])
+        sketches         = data.get('sketches', {})
+        sewing           = data.get('sewing', '')
+        printing         = data.get('printing', '')
+        washing          = data.get('washing', '')
+        presentation     = data.get('presentation', '')
+        revision_history = data.get('revision_history', [])
 
-        color_names = extras.get('color_names', {})
-        fabrics     = extras.get('fabrics', [])
-        sketches    = extras.get('sketches', {})
+        # EX-FACTORY 날짜 순 정렬
+        pos.sort(key=lambda p: parse_date(p.get('ex_factory_date','')) or datetime.date.max)
 
-        for key in request.files:
-            if key.startswith('sketch_'):
-                style = key.replace('sketch_', '')
-                img_bytes = request.files[key].read()
-                sketches[style] = base64.b64encode(img_bytes).decode()
+        wb = load_workbook(TEMPLATE_PATH)
+        ws = wb.active
 
-        wb, ws = get_template_ws()
-        pos.sort(key=lambda p: parse_date(p.get('ex_factory_date', '')) or datetime.date.max)
+        # ── 헤더 ──────────────────────────────────────────────
+        w(ws, ROW_SEWING,       3, sewing)
+        w(ws, ROW_PRINTING,     3, printing)
+        w(ws, ROW_WASHING,      3, washing)
+        w(ws, ROW_PRESENTATION, 3, presentation)
 
-        w(ws, ROW_FILE_NO, 3, file_no)
-        w(ws, ROW_VENDOR,  3, vendor)
-        w(ws, ROW_SEWING,  3, sewing)
-        w(ws, 5, 3, printing)
-        w(ws, 6, 3, washing)
-        w(ws, 7, 3, presentation)
-        if pos:
-            w(ws, ROW_SEASON, 3, pos[0].get('season', ''))
+        # ── Revision History ──────────────────────────────────
+        for i, rev in enumerate(revision_history):
+            row = ROW_REVISION_START + i
+            w(ws, row, COL_REVISION_DATE, rev.get('date', ''))
+            w(ws, row, COL_REVISION_POS,  rev.get('pos_numbers', ''))
+            w(ws, row, COL_REVISION_DESC, rev.get('description', ''))
 
-        fabrics.sort(key=lambda x: x.get('combo', ''))
-        for fab in fabrics:
-            row = ROW_C.get(fab.get('combo', ''))
-            if not row: continue
-            w(ws, row, 3,  fab.get('body_code', ''))
-            w(ws, row, 4,  fab.get('body_desc', ''))
-            w(ws, row, 7,  fab.get('trim_code', ''))
-            w(ws, row, 8,  fab.get('trim_desc', ''))
-            # HTS CODE는 Order Recap에 미기재
+        # ── Fabric Combo 세부 ─────────────────────────────────
+        for i, fc in enumerate(fabric_combos[:6]):
+            row = FABRIC_COMBO_START + i
+            w(ws, row, FABRIC_COL_COMBO, fc.get('combo', f'C{i+1}'))
+            w(ws, row, FABRIC_COL_BCODE, fc.get('body_code', ''))
+            w(ws, row, FABRIC_COL_BDESC, fc.get('body_desc', ''))
+            w(ws, row, FABRIC_COL_TCODE, fc.get('trim_code', ''))
+            w(ws, row, FABRIC_COL_TDESC, fc.get('trim_desc', ''))
 
-        TARGET_W_PX = round(5 / 2.54 * 96)
-        style_idx_map = {}
+        # ── PO 슬롯 ───────────────────────────────────────────
+        for slot, po in enumerate(pos[:11]):
+            col = PO_SLOT_COLS[slot]
 
-        for po in pos:
-            style = po.get('style', '')
-            if style not in style_idx_map:
-                idx = len(style_idx_map)
-                style_idx_map[style] = idx
-                hcol = style_header_col(idx)
-                w(ws, 3, hcol, style)
+            w(ws, ROW_PO,         col, po.get('po_number', ''))
+            w(ws, ROW_ORDER_UNIT, col, po.get('order_unit', ''))
 
-                sketch_b64 = sketches.get(style)
-                if sketch_b64:
-                    try:
-                        img_bytes = base64.b64decode(sketch_b64)
-                        pil = PILImage.open(io.BytesIO(img_bytes))
-                        ow, oh = pil.size
-                        th = round(TARGET_W_PX * oh / ow)
-                        pil = pil.resize((TARGET_W_PX, th), PILImage.LANCZOS)
-                        buf = io.BytesIO()
-                        pil.save(buf, format='PNG')
-                        buf.seek(0)
-                        xl_img = XLImage(buf)
-                        xl_img.anchor = f'{get_column_letter(hcol)}4'
-                        xl_img.width  = TARGET_W_PX
-                        xl_img.height = th
-                        ws.add_image(xl_img)
-                    except:
-                        pass
+            ex  = parse_date(po.get('ex_factory_date', ''))
+            w(ws, ROW_EX_FACTORY, col, ex  or po.get('ex_factory_date', ''))
+            dlv = parse_date(po.get('delivery_date', ''))
+            w(ws, ROW_DELIVERY,   col, dlv or po.get('delivery_date', ''))
 
-        for slot_idx, po in enumerate(pos):
-            if slot_idx >= 16: break
-            cp = pcs_col(slot_idx)
-            cf = fob_col(slot_idx)
+            w(ws, ROW_STYLE,      col, po.get('style', ''))
+            w(ws, ROW_COLOR_CODE, col, po.get('color_code', ''))
+            w(ws, ROW_COLOR_NAME, col, color_names.get(po.get('color_code',''), ''))
 
-            style      = po.get('style', '')
-            color      = po.get('color_code', '')
-            color_name = color_names.get(color, '')
+            # Combo 라벨
+            fiber = normalize_fiber(po.get('fabric_desc', ''))
+            combo_label = ''
+            for fc in fabric_combos:
+                if normalize_fiber(fc.get('body_desc', '')) == fiber:
+                    combo_label = fc.get('combo', '')
+                    break
+            w(ws, ROW_FABRIC_LABEL, col, combo_label)
 
-            w(ws, ROW_PO,       cp, po.get('po_number', ''))
-            w(ws, ROW_UNIT,     cp, po.get('total_pcs', 0))
-            w(ws, ROW_STYLE,    cp, style)
-            w(ws, ROW_COLOR_CD, cp, color)
-            w(ws, ROW_COLOR,    cp, color_name)
-            w(ws, ROW_SHIP,     cp, po.get('ship_to', 'Carhartt Inc'))
-            w(ws, ROW_MODE,     cp, po.get('ship_mode', 'S-Ocean'))
-
-            ex = parse_date(po.get('ex_factory_date'))
-            if ex: w(ws, ROW_EX, cp, ex, 'MM/DD/YYYY')
-
-            dlv = parse_date(po.get('delivery_date'))
-            if dlv: w(ws, ROW_DLV, cp, dlv, 'MM/DD/YYYY')
-
-            w(ws, ROW_FABRIC, cp, po.get('fabric_combo', 'C1'))
+            w(ws, ROW_SHIP_TO,   col, po.get('ship_to', ''))
+            w(ws, ROW_SHIP_MODE, col, po.get('ship_mode', ''))
 
             sizes = po.get('sizes', {})
-            for sz, row in SIZE_ROWS.items():
-                sd = sizes.get(sz, {})
-                pcs = sd.get('pcs', 0)
-                fob = sd.get('fob', 0)
-                w(ws, row, cp, pcs if pcs else None)
-                w(ws, row, cf, fob if fob else None)
+            for size, srow in SIZE_ROWS.items():
+                qty = sizes.get(size, 0)
+                if qty:
+                    w(ws, srow, col, qty)
 
-        td = parse_date(today) or datetime.date.today()
-        w(ws, ROW_REV_START, COL_REV_DATE,  td, 'YYYY-MM-DD')
-        w(ws, ROW_REV_START, COL_REV_NOTES, 'PO Issued')
+            w(ws, ROW_TOTAL, col, po.get('total_qty', 0) or 0)
+            if po.get('fob_price'):
+                w(ws, ROW_FOB, col, po.get('fob_price', ''))
 
-        filename = f'{file_no}_Order Recap_Team#4_{today}.xlsx'
+        # ── 스케치 이미지 ─────────────────────────────────────
+        styles_seen = []
+        for po in pos:
+            sty = po.get('style', '')
+            if sty and sty not in styles_seen:
+                styles_seen.append(sty)
 
-        buf = io.BytesIO()
-        wb.save(buf)
-        buf.seek(0)
-        xlsx_b64 = base64.b64encode(buf.read()).decode()
+        for idx, style in enumerate(styles_seen[:4]):
+            if style in sketches and sketches[style]:
+                raw = sketches[style]
+                if ',' in raw:
+                    raw = raw.split(',')[1]
+                try:
+                    img_bytes  = base64.b64decode(raw)
+                    img_stream = io.BytesIO(img_bytes)
+                    img        = XLImage(img_stream)
+                    target_w   = int(5 / 2.54 * 96)   # 5cm → px
+                    try:
+                        from PIL import Image as PILImage
+                        pil = PILImage.open(io.BytesIO(img_bytes))
+                        ow, oh = pil.size
+                        scale      = target_w / ow
+                        img.width  = target_w
+                        img.height = int(oh * scale)
+                    except Exception:
+                        img.width  = target_w
+                        img.height = 120
+                    col_letter = get_column_letter(SKETCH_COLS.get(idx, 16))
+                    ws.add_image(img, f'{col_letter}{SKETCH_ROW}')
+                except Exception:
+                    pass
 
-        return jsonify({'xlsx_b64': xlsx_b64, 'filename': filename})
+        # ── 저장 ──────────────────────────────────────────────
+        date_str = datetime.date.today().strftime('%Y%m%d')
+        filename = f"{file_number}_Order Recap_Team#4_{date_str}.xlsx"
+
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+
+        return send_file(
+            output,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename
+        )
 
     except Exception as e:
-        import traceback
         return jsonify({'error': str(e), 'traceback': traceback.format_exc()}), 500
 
-
-@app.route('/health', methods=['GET'])
-def health():
-    return jsonify({'status': 'ok', 'template': os.path.exists(TEMPLATE_PATH)})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
