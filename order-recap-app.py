@@ -112,7 +112,7 @@ def w(ws, row, col, value):
 
 
 def get_client(req):
-    key = req.headers.get('X-API-Key', '')
+    key = req.headers.get('X-API-Key', '') or os.environ.get('ANTHROPIC_API_KEY', '')
     return anthropic.Anthropic(api_key=key) if key else anthropic.Anthropic()
 
 
