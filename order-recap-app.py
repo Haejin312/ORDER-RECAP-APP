@@ -227,11 +227,9 @@ def build_excel():
         for i, rev in enumerate(revision_history):
             row = ROW_REVISION_START + i
             w(ws, row, COL_REV_DATE,  rev.get('date',''))
-            # Notes에 PO번호 + 변경내용 합쳐서 기입
-            po_str   = rev.get('pos_numbers','')
-            desc_str = rev.get('description','')
-            notes    = f"PO: {po_str} | {desc_str}" if po_str else desc_str
-            w(ws, row, COL_REV_NOTES, notes)
+            # notes 키 우선, 없으면 description 키 fallback
+            notes_val = rev.get('notes','') or rev.get('description','')
+            w(ws, row, COL_REV_NOTES, notes_val)
 
         # ── Fabric Combination (row 11~14) ─────────────
         for i, fc in enumerate(fabric_combos[:4]):
