@@ -217,11 +217,24 @@ def build_excel():
         wb = load_workbook(TEMPLATE_PATH)
         ws = wb.active
 
+        # ── File#, Season ──────────────────────────────
+        w(ws, 1, 3, file_number)   # C1
+        # season은 프론트에서 받는 경우 대비 (현재는 file_number 연도 추출)
+        season = data.get('season', '')
+        if season:
+            w(ws, 2, 3, season)
+
         # ── 헤더 (col 3) ──────────────────────────────
-        w(ws, ROW_SEWING,       3, sewing)
-        w(ws, ROW_PRINTING,     3, printing)
-        w(ws, ROW_WASHING,      3, washing)
-        w(ws, ROW_PRESENTATION, 3, presentation)
+        def clean(val):
+            """직접입력 문자열이 그대로 오면 빈값으로"""
+            if val and str(val).strip() == '직접입력':
+                return ''
+            return val
+
+        w(ws, ROW_SEWING,       3, clean(sewing))
+        w(ws, ROW_PRINTING,     3, clean(printing))
+        w(ws, ROW_WASHING,      3, clean(washing))
+        w(ws, ROW_PRESENTATION, 3, clean(presentation))
 
         # ── Revision History (row 9+, AC/AE열) ────────
         for i, rev in enumerate(revision_history):
@@ -235,10 +248,10 @@ def build_excel():
         for i, fc in enumerate(fabric_combos[:4]):
             row = FABRIC_ROW_START + i
             w(ws, row, FABRIC_COL_COMBO, fc.get('combo', f'C{i+1}'))
-            w(ws, row, FABRIC_COL_BCODE, fc.get('bodyCode',''))
-            w(ws, row, FABRIC_COL_BDESC, fc.get('bodyDesc',''))
-            w(ws, row, FABRIC_COL_TCODE, fc.get('trimCode',''))
-            w(ws, row, FABRIC_COL_TDESC, fc.get('trimDesc',''))
+            w(ws, row, FABRIC_COL_BCODE, clean(fc.get('bodyCode','')))
+            w(ws, row, FABRIC_COL_BDESC, clean(fc.get('bodyDesc','')))
+            w(ws, row, FABRIC_COL_TCODE, clean(fc.get('trimCode','')))
+            w(ws, row, FABRIC_COL_TDESC, clean(fc.get('trimDesc','')))
 
         # ── PO 슬롯 (16개) ────────────────────────────
         for slot, po in enumerate(pos[:16]):
@@ -282,7 +295,16 @@ def build_excel():
                 if fob:
                     w(ws, srow, fob_col, float(fob))
 
-        # ── 스케치 이미지 ─────────────────────────────
+        # ── Row 23(COLOR), 25(SHIP TO) 높이 조정 ────────
+        ws.row_dimensions[23].height = 36   # 두 줄 표시 가능
+        ws.row_dimensions[25].height = 45   # 주소 두 줄 표시 가능
+
+        # ── 스케치 이미지 (row4~14 병합셀 중앙 정렬) ──
+        # 셀 크기: 3열(각 13 char width≈91px) × 11행(각 16.8pt≈22.4px)
+        # → 셀 너비≈273px, 셀 높이≈246px
+        CELL_W_PX = int(3 * 13 * 7)        # ≈273px
+        CELL_H_PX = int(11 * 16.8 / 72 * 96)  # ≈246px
+
         styles_seen = []
         for po in pos:
             sty = po.get('style','')
@@ -298,18 +320,42 @@ def build_excel():
                     img_bytes  = base64.b64decode(raw)
                     img_stream = io.BytesIO(img_bytes)
                     img        = XLImage(img_stream)
-                    target_w   = int(5 / 2.54 * 96)   # 5cm → px ≈ 189
+
+                    target_w = int(5 / 2.54 * 96)   # 5cm ≈ 189px
                     try:
                         from PIL import Image as PILImage
                         pil = PILImage.open(io.BytesIO(img_bytes))
                         ow, oh = pil.size
-                        img.width  = target_w
-                        img.height = int(oh * (target_w / ow))
+                        target_h = int(oh * (target_w / ow))
                     except Exception:
-                        img.width  = target_w
-                        img.height = 120
-                    col_letter = get_column_letter(SKETCH_COLS.get(idx, 16))
-                    ws.add_image(img, f'{col_letter}{SKETCH_ROW}')
+                        target_h = 220
+
+                    # 셀보다 크면 축소
+                    if target_w > CELL_W_PX - 10:
+                        scale = (CELL_W_PX - 10) / target_w
+                        target_w = int(target_w * scale)
+                        target_h = int(target_h * scale)
+                    if target_h > CELL_H_PX - 10:
+                        scale = (CELL_H_PX - 10) / target_h
+                        target_w = int(target_w * scale)
+                        target_h = int(target_h * scale)
+
+                    img.width  = target_w
+                    img.height = target_h
+
+                    # 중앙 정렬 오프셋 (EMU 단위, 1px = 9525 EMU)
+                    px_to_emu = 9525
+                    x_off = max(0, (CELL_W_PX - target_w) // 2) * px_to_emu
+                    y_off = max(0, (CELL_H_PX - target_h) // 2) * px_to_emu
+
+                    from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
+                    from openpyxl.drawing.xdr import XDRPositiveSize2D
+
+                    col_idx = SKETCH_COLS.get(idx, 16) - 1  # 0-based
+                    marker  = AnchorMarker(col=col_idx, colOff=x_off, row=3, rowOff=y_off)  # row=3 → Excel row 4
+                    size    = XDRPositiveSize2D(target_w * px_to_emu, target_h * px_to_emu)
+                    img.anchor = OneCellAnchor(_from=marker, ext=size)
+                    ws.add_image(img)
                 except Exception:
                     pass
 
