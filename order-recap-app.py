@@ -10,7 +10,7 @@ from openpyxl.utils import get_column_letter
 app = Flask(__name__)
 CORS(app)
 
-TEMPLATE_PATH = 'Carhartt order recap 양식.xlsx'
+TEMPLATE_PATH = 'Carhartt_order_recap_양식.xlsx'
 
 # ══════════════════════════════════════════════════
 # 새 양식 기반 정확한 Row/Column 상수
